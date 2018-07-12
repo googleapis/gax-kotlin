@@ -1,0 +1,330 @@
+/*
+ * Copyright 2018 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.kgax.grpc
+
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
+import com.google.kgax.Page
+import com.google.protobuf.MessageLite
+import io.grpc.ClientInterceptor
+import io.grpc.stub.AbstractStub
+import io.grpc.stub.StreamObserver
+import java.util.concurrent.Executor
+
+@DslMarker
+annotation class SugarDSLMarker
+
+@SugarDSLMarker
+abstract class DecoratedOptions
+
+/**
+ * Features that can be enabled on the gRPC stubs.
+ *
+ * [enableResponseMetadata] captures body metadata that can be used with [prepare] and
+ * returned to the caller as [ResponseMetadata].
+ */
+class ClientOptions(val enableResponseMetadata: Boolean = true) : DecoratedOptions()
+
+/**
+ * Decorated call options. The settings apply on a per-call level.
+ */
+class ClientCallOptions() : DecoratedOptions() {
+    internal var responseMetadata: ResponseMetadata? = null
+    internal val requestMetadata = mutableMapOf<String, List<String>>()
+    internal val initialStreamRequests = mutableListOf<Any>()
+    internal val interceptors = mutableListOf<ClientInterceptor>()
+
+    constructor(opts: ClientCallOptions) : this() {
+        requestMetadata.putAll(opts.requestMetadata)
+        initialStreamRequests.addAll(opts.initialStreamRequests)
+    }
+
+    /** Append metadata to the call */
+    fun withMetadata(key: String, value: List<String>) {
+        requestMetadata[key] = value
+    }
+
+    /** Omit metadata from the call */
+    fun withoutMetadata(key: String) {
+        requestMetadata.remove(key)
+    }
+
+    /** For outbound streams, send an initial message as soon as possible */
+    fun <T : MessageLite> withInitialRequest(request: T) {
+        initialStreamRequests.add(request)
+    }
+
+    /** Append arbitrary interceptors (for advanced use) */
+    fun withInterceptor(interceptor: ClientInterceptor) {
+        interceptors.add(interceptor)
+    }
+}
+
+/**
+ * A convenience wrapper for gRPC stubs that enables ease of use and the
+ * addition of some additional functionality.
+ *
+ * You don't typically need to create instance of this class directly. Instead use
+ * the [prepare] method that this library defines for all gRPC stubs, which will
+ * ensure the [stub] and [options] are setup correctly.
+ *
+ * For example:
+ * ```
+ * val stub = StubFactory(MyBlockingStub::class, "host.example.com")
+ *                .fromServiceAccount(keyFile, listOf("https://host.example.com/auth/my-scope"))
+ * val response = stub.prepare().executeBlocking { it -> it.myMethod(...) }
+ * ```
+ */
+class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOptions) {
+
+    /**
+     * Execute a blocking call. For example:
+     *
+     * ```
+     * val response = stub.prepare {
+     *     withMetadata("foo", listOf("bar"))
+     * }.executeBlocking {
+     *     it.myBlockingMethod(...)
+     * }
+     * print("${response.body}")
+     * ```
+     *
+     * The [method] lambda should perform a blocking method call on the stub given as the
+     * first parameter. The result along with any additional information, such as
+     * [ResponseMetadata], will be returned.
+     */
+    fun <RespT> executeBlocking(method: (T) -> RespT): CallResult<RespT> {
+        val response = method(stub)
+        return CallResult(response, options.responseMetadata ?: ResponseMetadata())
+    }
+
+    /**
+     * Execute a future-based call. For example:
+     *
+     * ```
+     * val future = stub.prepare {
+     *     withMetadata("foo", listOf("bar"))
+     * }.executeFuture {
+     *     it.myFutureMethod(...)
+     * }
+     * future.get { print("${it.body}") }
+     * ```
+     *
+     * The [method] lambda should perform a future method call on the stub given as the
+     * first parameter. The result along with any additional information, such as
+     * [ResponseMetadata], will be returned as a future.
+     *
+     * Use [ListenableFuture.get] to block for the result or [ListenableFuture.addListener]
+     * to access the result asynchronously.
+     */
+    fun <RespT> executeFuture(
+            method: (T) -> ListenableFuture<RespT>
+    ): ListenableFuture<CallResult<RespT>> =
+            Futures.transform(method(stub)) {
+                CallResult(it ?: throw IllegalStateException("Future returned null value"),
+                        options.responseMetadata ?: ResponseMetadata())
+            }
+
+    /**
+     * Execute a bidirectional streaming call. For example:
+     *
+     * ```
+     * val streams = stub.prepare().executeStreaming { it::myStreamingMethod }
+     *
+     *  // process incoming responses
+     *  streams.responses.onNext = { print("response: $it") }
+     *  streams.responses.onError = { print("error: $it") }
+     *  streams.responses.onCompleted = { print("all done!") }
+     *
+     *  // send outbound requests
+     *  stream.requests.send(...)
+     *  stream.requests.send(...)
+     * ```
+     *
+     * The [method] lambda should return a bound method reference on the stub that is provided
+     * as the first parameter to the lambda, as shown in the example. There is no need to call
+     * the stub method directly. It will be done as part of this call. The result of this method
+     * will provide a pair of inbound and outbound streams.
+     *
+     * Callbacks attached to the returned stream will be invoked on their original
+     * background executor. Set the optional [ResponseStream.executor] parameter as needed
+     * (i.e. to have them executed on the main thread, etc.)
+     */
+    fun <ReqT, RespT> executeStreaming(
+            method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
+    ): StreamingCall<ReqT, RespT> {
+        val responseStream = ResponseStreamImpl<RespT>()
+        val requestObserver = method(stub)(object : StreamObserver<RespT> {
+            override fun onNext(value: RespT) =
+                    responseStream.executor?.execute { responseStream.onNext(value) } ?: responseStream.onNext(value)
+
+            override fun onError(t: Throwable) =
+                    responseStream.executor?.execute { responseStream.onError(t) } ?: responseStream.onError(t)
+
+            override fun onCompleted() =
+                    responseStream.executor?.execute { responseStream.onCompleted() } ?: responseStream.onCompleted()
+        })
+        val requestStream = object : RequestStream<ReqT> {
+            override fun send(request: ReqT) = requestObserver.onNext(request)
+        }
+
+        // add and initial requests
+        options.initialStreamRequests.map {
+            (it as? ReqT) ?: throw IllegalArgumentException("early request data is an invalid type")
+        }.forEach { requestStream.send(it) }
+
+        return StreamingCall(requestStream, responseStream)
+    }
+
+    /**
+     * Execute a call that sends a stream of requests to the server. For example:
+     *
+     * ```
+     * val streams = stub.prepare().executeClientStreaming { it::myStreamingMethod }
+     *
+     *  // process the response once available
+     *  streams.response.get { print("response: $it") }
+     *
+     *  // send outbound requests
+     *  stream.requests.send(...)
+     *  stream.requests.send(...)
+     * ```
+     *
+     * The [method] lambda should return a bound method reference on the stub that is provided
+     * as the first parameter to the lambda, as shown in the example. There is no need to call
+     * the stub method directly. It will be done as part of this call. The result of this method
+     * will provide an outbound stream for requests to be sent to the server and a future for
+     * the server's response.
+     */
+    fun <ReqT, RespT> executeClientStreaming(
+            method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
+    ): ClientStreamingCall<ReqT, RespT> {
+        val responseFuture = SettableFuture.create<RespT>()
+        val requestObserver = method(stub)(object : StreamObserver<RespT> {
+            override fun onNext(value: RespT) {
+                responseFuture.set(value)
+            }
+
+            override fun onError(t: Throwable) {
+                responseFuture.setException(t)
+            }
+
+            override fun onCompleted() = Unit
+        })
+        val requestStream = object : RequestStream<ReqT> {
+            override fun send(request: ReqT) = requestObserver.onNext(request)
+        }
+
+        // add and initial requests
+        options.initialStreamRequests.map {
+            (it as? ReqT) ?: throw IllegalArgumentException("early request data is an invalid type")
+        }.forEach { requestStream.send(it) }
+
+        return ClientStreamingCall(requestStream, responseFuture)
+    }
+
+    /**
+     * Execute a call that receives one-way streaming responses from the server. For example:
+     *
+     * ```
+     * val request = MyRequest(...)
+     * val streams = stub.prepare().executeServerStreaming { it, observer ->
+     *   it.myStreamingMethod(request, observer)
+     * }
+     *
+     *  // process incoming responses
+     *  streams.responses.onNext = { print("response: $it") }
+     *  streams.responses.onError = { print("error: $it") }
+     *  streams.responses.onCompleted = { print("all done!") }
+     * ```
+     *
+     * The [method] lambda should call a streaming method reference on the stub that is provided
+     * as the first parameter to the lambda using the observer given as the second parameter.
+     * The result of this method will provide the inbound stream of responses from the server.
+     *
+     * Callbacks attached to the returned stream will be invoked on their original
+     * background executor. Set the optional [ResponseStream.executor] parameter as needed
+     * (i.e. to have them executed on the main thread, etc.)
+     */
+    fun <RespT> executeServerStreaming(
+            method: (T, StreamObserver<RespT>) -> Unit
+    ): ServerStreamingCall<RespT> {
+        val responseStream = ResponseStreamImpl<RespT>()
+        method(stub, object : StreamObserver<RespT> {
+            override fun onNext(value: RespT) =
+                    responseStream.executor?.execute { responseStream.onNext(value) } ?: responseStream.onNext(value)
+
+            override fun onError(t: Throwable) =
+                    responseStream.executor?.execute { responseStream.onError(t) } ?: responseStream.onError(t)
+
+            override fun onCompleted() =
+                    responseStream.executor?.execute { responseStream.onCompleted() } ?: responseStream.onCompleted()
+        })
+
+        return ServerStreamingCall(responseStream)
+    }
+
+}
+
+/** Result of the call with the response [body] associated [metadata]. */
+data class CallResult<RespT>(val body: RespT, val metadata: ResponseMetadata)
+
+/** Result of a call with paging */
+data class PageResult<T>(override val elements: Iterable<T>,
+                         override val token: String,
+                         override val metadata: ResponseMetadata) : Page<T>
+
+/** A stream of requests to the server. */
+interface RequestStream<ReqT> {
+    fun send(request: ReqT)
+}
+
+/** A stream of responses from the server. */
+interface ResponseStream<RespT> {
+    var onNext: (RespT) -> Unit
+    var onError: (Throwable) -> Unit
+    var onCompleted: () -> Unit
+
+    var executor: Executor?
+}
+
+/** Result of a bi-directional streaming call including [requests] and [responses] streams. */
+data class StreamingCall<ReqT, RespT>(val requests: RequestStream<ReqT>,
+                                      val responses: ResponseStream<RespT>)
+
+/** Result of a client streaming call including the [requests] stream and a [response]. */
+data class ClientStreamingCall<ReqT, RespT>(val requests: RequestStream<ReqT>,
+                                            val response: ListenableFuture<RespT>)
+
+/** Result of a server streaming call including the stream of [responses]. */
+data class ServerStreamingCall<RespT>(val responses: ResponseStream<RespT>)
+
+/** Result of a server call with the response as a [ListenableFuture]. */
+typealias FutureCall<T> = ListenableFuture<CallResult<T>>
+
+/** Add a [callback] that will be run on the provided [executor] when the CallResult is available */
+fun <T> FutureCall<T>.enqueue(executor: Executor, callback: (CallResult<T>) -> Unit) =
+        this.addListener(java.lang.Runnable {
+            callback(this.get() ?: throw IllegalStateException("get() returned an invalid (null) CallResult"))
+        }, executor)
+
+internal class ResponseStreamImpl<RespT>(override var onNext: (RespT) -> Unit = {},
+                                         override var onError: (Throwable) -> Unit = {},
+                                         override var onCompleted: () -> Unit = {},
+                                         override var executor: Executor? = null) : ResponseStream<RespT>
+
