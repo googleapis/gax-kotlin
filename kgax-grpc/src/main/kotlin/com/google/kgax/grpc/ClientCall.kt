@@ -18,6 +18,7 @@ package com.google.kgax.grpc
 
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import com.google.kgax.Page
 import com.google.protobuf.MessageLite
@@ -322,6 +323,13 @@ fun <T> FutureCall<T>.enqueue(executor: Executor, callback: (CallResult<T>) -> U
         this.addListener(java.lang.Runnable {
             callback(this.get() ?: throw IllegalStateException("get() returned an invalid (null) CallResult"))
         }, executor)
+
+private val DIRECT_EXECUTOR = MoreExecutors.directExecutor()
+
+/** Add a [callback] that will be run on the same thread as the caller */
+fun <T> FutureCall<T>.enqueue(callback: (CallResult<T>) -> Unit) = DIRECT_EXECUTOR.execute {
+    callback(this.get() ?: throw IllegalStateException("get() returned an invalid (null) CallResult"))
+}
 
 internal class ResponseStreamImpl<RespT>(override var onNext: (RespT) -> Unit = {},
                                          override var onError: (Throwable) -> Unit = {},

@@ -75,6 +75,9 @@ class LongRunningCall<T : MessageLite>(private val stub: OperationsGrpc.Operatio
     /** Add a [callback] that will be run on the provided [executor] when the CallResult is available */
     fun enqueue(executor: Executor, callback: (CallResult<T>) -> Unit) = asFuture().enqueue(executor, callback)
 
+    /** Add a [callback] that will be run on the same thread as the caller */
+    fun enqueue(callback: (CallResult<T>) -> Unit) = asFuture().enqueue(callback)
+
     /** Get a future that will resolve when the operation has been completed. */
     fun asFuture(): FutureCall<T> = executor.submit(Callable<CallResult<T>> { waitUntilDone() })
 
