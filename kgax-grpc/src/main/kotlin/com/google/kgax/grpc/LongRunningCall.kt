@@ -33,16 +33,12 @@ import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 /** Block until this operation has completed and returned a result of the given [type]. */
-fun <T : MessageLite> Operation.waitUntilDone(stub: AbstractStub<*>, type: Class<T>) =
-        LongRunningCall.of(this, stub, type).get()
-
-/** Block until this operation has completed and returned a result of the given [type]. */
 fun <T : MessageLite> CallResult<Operation>.waitUntilDone(stub: AbstractStub<*>, type: Class<T>) =
-        LongRunningCall.of(this.body, stub, type).get()
+        LongRunningCall.of(this, stub, type).get()
 
 /** Resolves long running operations. */
 class LongRunningCall<T : MessageLite>(private val stub: OperationsGrpc.OperationsFutureStub,
-                                       private val future: ListenableFuture<Operation>,
+                                       private val future: ListenableFuture<CallResult<Operation>>,
                                        private val responseType: Class<T>,
                                        private val executor: ListeningExecutorService = LongRunningCall.executor
 ) {
@@ -55,7 +51,7 @@ class LongRunningCall<T : MessageLite>(private val stub: OperationsGrpc.Operatio
     val isDone = future.isDone
 
     internal fun waitUntilDone(): CallResult<T> {
-        operation = future.get()
+        operation = future.get().body
         while (!operation!!.done) {
             try {
                 operation = stub.getOperation(GetOperationRequest.newBuilder()
@@ -86,14 +82,14 @@ class LongRunningCall<T : MessageLite>(private val stub: OperationsGrpc.Operatio
         var executor: ListeningExecutorService = MoreExecutors.listeningDecorator(
                 Executors.newCachedThreadPool())
 
-        fun <T : MessageLite> of(operation: Operation,
+        fun <T : MessageLite> of(operation: CallResult<Operation>,
                                  stub: AbstractStub<*>,
                                  type: Class<T>
         ): LongRunningCall<T> {
             val s = OperationsGrpc.newFutureStub(stub.getChannel())
                     .withExecutor(executor)
                     .withCallCredentials(stub.getCallOptions().credentials)
-            val future = SettableFuture.create<Operation>()
+            val future = SettableFuture.create<CallResult<Operation>>()
             future.set(operation)
             return LongRunningCall(s, future, type)
         }

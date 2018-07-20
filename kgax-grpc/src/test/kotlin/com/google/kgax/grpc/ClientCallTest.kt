@@ -32,7 +32,7 @@ class ClientCallTest {
 
     @Test
     fun `ClientCallOptions remembers metadata`() {
-        val options = ClientCallOptions()
+        val options = ClientCallOptions.Builder()
         options.withMetadata("foo", listOf("a", "b"))
         options.withMetadata("bar", listOf("1", "2"))
         options.withMetadata("foo", listOf("one"))
@@ -44,7 +44,7 @@ class ClientCallTest {
 
     @Test
     fun `ClientCallOptions forgets metadata`() {
-        val options = ClientCallOptions()
+        val options = ClientCallOptions.Builder()
         options.withMetadata("foo", listOf("a", "b"))
         options.withMetadata("bar", listOf("1", "2"))
         options.withoutMetadata("foo")

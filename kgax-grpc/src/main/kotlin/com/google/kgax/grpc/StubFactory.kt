@@ -177,10 +177,10 @@ fun <T : AbstractStub<T>> T.decorate(credentials: GoogleCredentials, options: Cl
  * instead of calling methods on the gRPC stubs directly when you want to use the additional
  * functionality provided by this library.
  */
-fun <T : AbstractStub<T>> T.prepare(init: ClientCallOptions.() -> Unit = {}): ClientCall<T> {
-    val opts = ClientCallOptions()
-    opts.init()
-    return this.prepare(opts)
+fun <T : AbstractStub<T>> T.prepare(init: ClientCallOptions.Builder.() -> Unit = {}): ClientCall<T> {
+    val builder = ClientCallOptions.Builder()
+    builder.init()
+    return this.prepare(ClientCallOptions(builder))
 }
 
 /** Prepare a decorated call */
@@ -201,9 +201,14 @@ fun <T : AbstractStub<T>> T.prepare(options: ClientCallOptions): ClientCall<T> {
         stub = MetadataUtils.attachHeaders(stub, header)
     }
 
+    // add auth
+    if (opts.credentials != null) {
+        stub = stub.withCallCredentials(opts.credentials)
+    }
+
     // add advanced features
-    if (options.interceptors.any()) {
-        stub = stub.withInterceptors(*options.interceptors.toTypedArray())
+    if (opts.interceptors.any()) {
+        stub = stub.withInterceptors(*opts.interceptors.toTypedArray())
     }
 
     // save the options

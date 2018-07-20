@@ -16,22 +16,24 @@
 
 package com.google.kgax.grpc
 
+import com.google.auth.oauth2.AccessToken
+import com.google.auth.oauth2.GoogleCredentials
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import com.google.kgax.Page
 import com.google.protobuf.MessageLite
+import io.grpc.CallCredentials
 import io.grpc.ClientInterceptor
+import io.grpc.auth.MoreCallCredentials
 import io.grpc.stub.AbstractStub
 import io.grpc.stub.StreamObserver
+import java.io.InputStream
 import java.util.concurrent.Executor
 
 @DslMarker
-annotation class SugarDSLMarker
-
-@SugarDSLMarker
-abstract class DecoratedOptions
+annotation class DecoratorMarker
 
 /**
  * Features that can be enabled on the gRPC stubs.
@@ -39,40 +41,78 @@ abstract class DecoratedOptions
  * [enableResponseMetadata] captures body metadata that can be used with [prepare] and
  * returned to the caller as [ResponseMetadata].
  */
-class ClientOptions(val enableResponseMetadata: Boolean = true) : DecoratedOptions()
+class ClientOptions(val enableResponseMetadata: Boolean = true)
 
 /**
  * Decorated call options. The settings apply on a per-call level.
  */
-class ClientCallOptions() : DecoratedOptions() {
+class ClientCallOptions constructor(val credentials: CallCredentials? = null,
+                                    internal val requestMetadata: Map<String, List<String>> = mapOf(),
+                                    internal val initialStreamRequests: List<Any> = listOf(),
+                                    internal val interceptors: List<ClientInterceptor> = listOf()
+) {
     internal var responseMetadata: ResponseMetadata? = null
-    internal val requestMetadata = mutableMapOf<String, List<String>>()
-    internal val initialStreamRequests = mutableListOf<Any>()
-    internal val interceptors = mutableListOf<ClientInterceptor>()
 
-    constructor(opts: ClientCallOptions) : this() {
-        requestMetadata.putAll(opts.requestMetadata)
-        initialStreamRequests.addAll(opts.initialStreamRequests)
-    }
+    constructor(opts: ClientCallOptions) : this(opts.credentials, opts.requestMetadata,
+            opts.initialStreamRequests, opts.interceptors)
 
-    /** Append metadata to the call */
-    fun withMetadata(key: String, value: List<String>) {
-        requestMetadata[key] = value
-    }
+    constructor(builder: Builder) : this(builder.credentials, builder.requestMetadata,
+            builder.initialStreamRequests, builder.interceptors)
 
-    /** Omit metadata from the call */
-    fun withoutMetadata(key: String) {
-        requestMetadata.remove(key)
-    }
+    @DecoratorMarker
+    class Builder(
+            internal var credentials: CallCredentials? = null,
+            internal val requestMetadata: MutableMap<String, List<String>> = mutableMapOf(),
+            internal val initialStreamRequests: MutableList<Any> = mutableListOf(),
+            internal val interceptors: MutableList<ClientInterceptor> = mutableListOf()) {
 
-    /** For outbound streams, send an initial message as soon as possible */
-    fun <T : MessageLite> withInitialRequest(request: T) {
-        initialStreamRequests.add(request)
-    }
+        constructor(opts: ClientCallOptions) : this(opts.credentials,
+                opts.requestMetadata.toMutableMap(),
+                opts.initialStreamRequests.toMutableList(),
+                opts.interceptors.toMutableList())
 
-    /** Append arbitrary interceptors (for advanced use) */
-    fun withInterceptor(interceptor: ClientInterceptor) {
-        interceptors.add(interceptor)
+        /** Set service account credentials for authentication */
+        fun withServiceAccountCredentials(keyFile: InputStream,
+                                          scopes: List<String> = listOf()) {
+            val auth = if (scopes.isEmpty()) {
+                GoogleCredentials.fromStream(keyFile)
+            } else {
+                GoogleCredentials.fromStream(keyFile).createScoped(scopes)
+            }
+            credentials = MoreCallCredentials.from(auth)
+        }
+
+        /** Set the access token to use for authentication */
+        fun withAccessToken(token: AccessToken, scopes: List<String> = listOf()) {
+            val auth = if (scopes.isEmpty()) {
+                GoogleCredentials.create(token)
+            } else {
+                GoogleCredentials.create(token).createScoped(scopes)
+            }
+            credentials = MoreCallCredentials.from(auth)
+        }
+
+        /** Append metadata to the call */
+        fun withMetadata(key: String, value: List<String>) {
+            requestMetadata[key] = value
+        }
+
+        /** Omit metadata from the call */
+        fun withoutMetadata(key: String) {
+            requestMetadata.remove(key)
+        }
+
+        /** For outbound streams, send an initial message as soon as possible */
+        fun <T : MessageLite> withInitialRequest(request: T) {
+            initialStreamRequests.add(request)
+        }
+
+        /** Append arbitrary interceptors (for advanced use) */
+        fun withInterceptor(interceptor: ClientInterceptor) {
+            interceptors.add(interceptor)
+        }
+
+        fun build() = ClientCallOptions(this)
     }
 }
 

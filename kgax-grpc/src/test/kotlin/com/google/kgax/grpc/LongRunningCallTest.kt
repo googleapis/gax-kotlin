@@ -55,11 +55,11 @@ class LongRunningCallTest {
                     .thenReturn(futureDone)
         }
 
-        val future = SettableFuture.create<Operation>()
-        future.set(Operation.newBuilder()
+        val future = SettableFuture.create<CallResult<Operation>>()
+        future.set(CallResult(Operation.newBuilder()
                 .setName("test_op")
                 .setDone(false)
-                .build())
+                .build(), mock()))
         val lro = LongRunningCall(client, future, Operation::class.java)
         val result = lro.waitUntilDone()
 
