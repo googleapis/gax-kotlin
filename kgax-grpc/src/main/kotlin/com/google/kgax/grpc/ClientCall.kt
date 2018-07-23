@@ -46,10 +46,11 @@ class ClientOptions(val enableResponseMetadata: Boolean = true)
 /**
  * Decorated call options. The settings apply on a per-call level.
  */
-class ClientCallOptions constructor(val credentials: CallCredentials? = null,
-                                    internal val requestMetadata: Map<String, List<String>> = mapOf(),
-                                    internal val initialStreamRequests: List<Any> = listOf(),
-                                    internal val interceptors: List<ClientInterceptor> = listOf()
+class ClientCallOptions constructor(
+    val credentials: CallCredentials? = null,
+    internal val requestMetadata: Map<String, List<String>> = mapOf(),
+    internal val initialStreamRequests: List<Any> = listOf(),
+    internal val interceptors: List<ClientInterceptor> = listOf()
 ) {
     internal var responseMetadata: ResponseMetadata? = null
 
@@ -61,10 +62,11 @@ class ClientCallOptions constructor(val credentials: CallCredentials? = null,
 
     @DecoratorMarker
     class Builder(
-            internal var credentials: CallCredentials? = null,
-            internal val requestMetadata: MutableMap<String, List<String>> = mutableMapOf(),
-            internal val initialStreamRequests: MutableList<Any> = mutableListOf(),
-            internal val interceptors: MutableList<ClientInterceptor> = mutableListOf()) {
+        internal var credentials: CallCredentials? = null,
+        internal val requestMetadata: MutableMap<String, List<String>> = mutableMapOf(),
+        internal val initialStreamRequests: MutableList<Any> = mutableListOf(),
+        internal val interceptors: MutableList<ClientInterceptor> = mutableListOf()
+    ) {
 
         constructor(opts: ClientCallOptions) : this(opts.credentials,
                 opts.requestMetadata.toMutableMap(),
@@ -72,8 +74,10 @@ class ClientCallOptions constructor(val credentials: CallCredentials? = null,
                 opts.interceptors.toMutableList())
 
         /** Set service account credentials for authentication */
-        fun withServiceAccountCredentials(keyFile: InputStream,
-                                          scopes: List<String> = listOf()) {
+        fun withServiceAccountCredentials(
+            keyFile: InputStream,
+            scopes: List<String> = listOf()
+        ) {
             val auth = if (scopes.isEmpty()) {
                 GoogleCredentials.fromStream(keyFile)
             } else {
@@ -174,7 +178,7 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
      * to access the result asynchronously.
      */
     fun <RespT> executeFuture(
-            method: (T) -> ListenableFuture<RespT>
+        method: (T) -> ListenableFuture<RespT>
     ): ListenableFuture<CallResult<RespT>> =
             Futures.transform(method(stub)) {
                 CallResult(it ?: throw IllegalStateException("Future returned null value"),
@@ -207,7 +211,7 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
      * (i.e. to have them executed on the main thread, etc.)
      */
     fun <ReqT, RespT> executeStreaming(
-            method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
+        method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): StreamingCall<ReqT, RespT> {
         val responseStream = ResponseStreamImpl<RespT>()
         val requestObserver = method(stub)(object : StreamObserver<RespT> {
@@ -253,7 +257,7 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
      * the server's response.
      */
     fun <ReqT, RespT> executeClientStreaming(
-            method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
+        method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): ClientStreamingCall<ReqT, RespT> {
         val responseFuture = SettableFuture.create<RespT>()
         val requestObserver = method(stub)(object : StreamObserver<RespT> {
@@ -303,7 +307,7 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
      * (i.e. to have them executed on the main thread, etc.)
      */
     fun <RespT> executeServerStreaming(
-            method: (T, StreamObserver<RespT>) -> Unit
+        method: (T, StreamObserver<RespT>) -> Unit
     ): ServerStreamingCall<RespT> {
         val responseStream = ResponseStreamImpl<RespT>()
         method(stub, object : StreamObserver<RespT> {
@@ -319,16 +323,17 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
 
         return ServerStreamingCall(responseStream)
     }
-
 }
 
 /** Result of the call with the response [body] associated [metadata]. */
 data class CallResult<RespT>(val body: RespT, val metadata: ResponseMetadata)
 
 /** Result of a call with paging */
-data class PageResult<T>(override val elements: Iterable<T>,
-                         override val token: String,
-                         override val metadata: ResponseMetadata) : Page<T>
+data class PageResult<T>(
+    override val elements: Iterable<T>,
+    override val token: String,
+    override val metadata: ResponseMetadata
+) : Page<T>
 
 /** A stream of requests to the server. */
 interface RequestStream<ReqT> {
@@ -345,12 +350,16 @@ interface ResponseStream<RespT> {
 }
 
 /** Result of a bi-directional streaming call including [requests] and [responses] streams. */
-data class StreamingCall<ReqT, RespT>(val requests: RequestStream<ReqT>,
-                                      val responses: ResponseStream<RespT>)
+data class StreamingCall<ReqT, RespT>(
+    val requests: RequestStream<ReqT>,
+    val responses: ResponseStream<RespT>
+)
 
 /** Result of a client streaming call including the [requests] stream and a [response]. */
-data class ClientStreamingCall<ReqT, RespT>(val requests: RequestStream<ReqT>,
-                                            val response: ListenableFuture<RespT>)
+data class ClientStreamingCall<ReqT, RespT>(
+    val requests: RequestStream<ReqT>,
+    val response: ListenableFuture<RespT>
+)
 
 /** Result of a server streaming call including the stream of [responses]. */
 data class ServerStreamingCall<RespT>(val responses: ResponseStream<RespT>)
@@ -371,8 +380,9 @@ fun <T> FutureCall<T>.enqueue(callback: (CallResult<T>) -> Unit) = DIRECT_EXECUT
     callback(this.get() ?: throw IllegalStateException("get() returned an invalid (null) CallResult"))
 }
 
-internal class ResponseStreamImpl<RespT>(override var onNext: (RespT) -> Unit = {},
-                                         override var onError: (Throwable) -> Unit = {},
-                                         override var onCompleted: () -> Unit = {},
-                                         override var executor: Executor? = null) : ResponseStream<RespT>
-
+internal class ResponseStreamImpl<RespT>(
+    override var onNext: (RespT) -> Unit = {},
+    override var onError: (Throwable) -> Unit = {},
+    override var onCompleted: () -> Unit = {},
+    override var executor: Executor? = null
+) : ResponseStream<RespT>

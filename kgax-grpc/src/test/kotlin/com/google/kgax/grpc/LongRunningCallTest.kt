@@ -18,39 +18,33 @@ package com.google.kgax.grpc
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.ListeningExecutorService
 import com.google.common.util.concurrent.SettableFuture
 import com.google.longrunning.Operation
 import com.google.longrunning.OperationsGrpc
 import com.nhaarman.mockito_kotlin.any
-import com.nhaarman.mockito_kotlin.doReturn
-import com.nhaarman.mockito_kotlin.eq
 import com.nhaarman.mockito_kotlin.mock
-import com.nhaarman.mockito_kotlin.spy
 import com.nhaarman.mockito_kotlin.times
 import com.nhaarman.mockito_kotlin.verify
-import io.grpc.CallCredentials
-import io.grpc.CallOptions
-import java.util.concurrent.Executor
 import kotlin.test.Test
 
 class LongRunningCallTest {
 
     @Test
     fun `LRO waits until done`() {
-        val future1: ListenableFuture<Operation> = mock {
-            on { get() }.thenReturn(Operation.newBuilder().setName("a").setDone(false).build())
+        val result1: CallResult<Operation> = mock {
+            on { body }.thenReturn(Operation.newBuilder().setName("a").setDone(false).build())
         }
-        val futureDone: ListenableFuture<Operation> = mock {
-            on { get() }.thenReturn(Operation.newBuilder().setName("b").setDone(true).build())
+        val future1: ListenableFuture<CallResult<Operation>> = mock {
+            on { get() }.thenReturn(result1)
         }
-        val clientOptions: CallOptions = mock {
-            on { credentials }.thenReturn(mock())
+        val resultDone: CallResult<Operation> = mock {
+            on { body }.thenReturn(Operation.newBuilder().setName("b").setDone(true).build())
         }
-        val client: OperationsGrpc.OperationsFutureStub = mock {
-            on { channel }.thenReturn(mock())
-            on { callOptions }.thenReturn(clientOptions)
-            on { getOperation(any()) }
+        val futureDone: ListenableFuture<CallResult<Operation>> = mock {
+            on { get() }.thenReturn(resultDone)
+        }
+        val client: ClientCall<OperationsGrpc.OperationsFutureStub> = mock {
+            on { executeFuture<Operation>(any()) }
                     .thenReturn(future1)
                     .thenReturn(futureDone)
         }
@@ -65,7 +59,6 @@ class LongRunningCallTest {
 
         assertThat(result.body).isInstanceOf(Operation::class.java)
 
-        verify(client, times(2)).getOperation(any())
+        verify(client, times(2)).executeFuture<Operation>(any())
     }
-
 }

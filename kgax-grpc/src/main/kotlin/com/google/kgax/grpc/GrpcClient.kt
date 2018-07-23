@@ -16,20 +16,20 @@
 
 package com.google.kgax.grpc
 
-import com.google.kgax.grpc.ClientCallOptions
 import io.grpc.ManagedChannel
 import java.util.concurrent.TimeUnit
 
 /**
  * Marker for generated clients that holds the underlying gRPC [channel] and [options].
  */
-open abstract class GrpcClient(val channel: ManagedChannel,
-                               val options: ClientCallOptions) {
+open abstract class GrpcClient(
+    val channel: ManagedChannel,
+    val options: ClientCallOptions
+) {
 
     /** Shutdown the channel associated with this client. */
     @JvmOverloads
     fun shutdownChannel(waitForSeconds: Long = 5) {
         channel.shutdown().awaitTermination(waitForSeconds, TimeUnit.SECONDS)
     }
-
 }

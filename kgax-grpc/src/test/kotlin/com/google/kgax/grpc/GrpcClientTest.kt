@@ -40,8 +40,8 @@ class GrpcClientTest {
         verify(channel).awaitTermination(8, TimeUnit.SECONDS)
     }
 
-    private class TestClient(channel: ManagedChannel,
-                             options: ClientCallOptions
+    private class TestClient(
+        channel: ManagedChannel,
+        options: ClientCallOptions
     ) : GrpcClient(channel, options)
-
 }

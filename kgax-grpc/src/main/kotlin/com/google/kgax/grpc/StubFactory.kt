@@ -80,26 +80,31 @@ class StubFactory<T : AbstractStub<T>> {
      * and any additional [options].
      */
     @JvmOverloads
-    fun fromServiceAccount(keyFile: InputStream,
-                           oauthScopes: List<String>,
-                           options: ClientOptions = ClientOptions()) =
+    fun fromServiceAccount(
+        keyFile: InputStream,
+        oauthScopes: List<String>,
+        options: ClientOptions = ClientOptions()
+    ) =
             fromCallCredentials(MoreCallCredentials.from(
                     GoogleCredentials.fromStream(keyFile).createScoped(oauthScopes)), options)
-
 
     /**
      * Creates a stub from a access [token] with the provided [oauthScopes] and any additional
      * [options].
      */
     @JvmOverloads
-    fun fromAccessToken(token: AccessToken,
-                        oauthScopes: List<String>,
-                        options: ClientOptions = ClientOptions()) =
+    fun fromAccessToken(
+        token: AccessToken,
+        oauthScopes: List<String>,
+        options: ClientOptions = ClientOptions()
+    ) =
             fromCallCredentials(MoreCallCredentials.from(
                     GoogleCredentials.create(token).createScoped(oauthScopes)), options)
 
-    internal fun fromCallCredentials(credentials: CallCredentials,
-                                     options: ClientOptions = ClientOptions()): T {
+    internal fun fromCallCredentials(
+        credentials: CallCredentials,
+        options: ClientOptions = ClientOptions()
+    ): T {
         // instantiate stub
         try {
             val constructor = stubType.java

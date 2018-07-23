@@ -37,15 +37,17 @@ import io.grpc.Status
  * you need a more complex interceptor use the gRPC interceptor classes directly to implement it.
  */
 open class BasicInterceptor(
-        val onReady: () -> Unit = {},
-        val onHeaders: (Metadata) -> Unit = {},
-        val onMessage: (Any) -> Unit = {},
-        val onClose: (Status, Metadata) -> Unit = { _, _ -> }
+    val onReady: () -> Unit = {},
+    val onHeaders: (Metadata) -> Unit = {},
+    val onMessage: (Any) -> Unit = {},
+    val onClose: (Status, Metadata) -> Unit = { _, _ -> }
 ) : ClientInterceptor {
 
     override fun <ReqT, RespT> interceptCall(
-            method: MethodDescriptor<ReqT, RespT>,
-            callOptions: CallOptions, next: Channel): ClientCall<ReqT, RespT> {
+        method: MethodDescriptor<ReqT, RespT>,
+        callOptions: CallOptions,
+        next: Channel
+    ): ClientCall<ReqT, RespT> {
         val doOnReady = onReady
         val doOnHeaders = onHeaders
         val doOnMessage = onMessage
@@ -88,5 +90,4 @@ open class BasicInterceptor(
             }
         }
     }
-
 }

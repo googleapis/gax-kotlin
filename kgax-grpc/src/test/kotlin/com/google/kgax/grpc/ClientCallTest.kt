@@ -169,7 +169,7 @@ class ClientCallTest {
         // capture output stream
         val call = ClientCall(stub, mock())
         var outStream: StreamObserver<String>? = null
-        val result = call.executeServerStreaming { it, observer:StreamObserver<String> ->
+        val result = call.executeServerStreaming { it, observer: StreamObserver<String> ->
             assertThat(it).isEqualTo(stub)
             outStream = observer
         }
@@ -200,5 +200,4 @@ class ClientCallTest {
             return TestStub(channel, options)
         }
     }
-
 }

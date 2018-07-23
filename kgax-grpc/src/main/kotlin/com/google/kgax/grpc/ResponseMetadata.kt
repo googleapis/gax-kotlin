@@ -52,17 +52,18 @@ open class ResponseMetadata {
 
     companion object {
         val KEY: CallOptions.Key<ResponseMetadata> =
-                CallOptions.Key.of(CALL_OPTION_METADATA, null);
+                CallOptions.Key.of(CALL_OPTION_METADATA, null)
     }
-
 }
 
 /** Adds optional metadata support to API calls. */
 internal class ResponseMetadataInterceptor : ClientInterceptor {
 
     override fun <ReqT, RespT> interceptCall(
-            method: MethodDescriptor<ReqT, RespT>,
-            callOptions: CallOptions, next: Channel): ClientCall<ReqT, RespT> {
+        method: MethodDescriptor<ReqT, RespT>,
+        callOptions: CallOptions,
+        next: Channel
+    ): ClientCall<ReqT, RespT> {
         return object : ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
                 next.newCall(method, callOptions)) {
             override fun start(responseListener: ClientCall.Listener<RespT>, headers: io.grpc.Metadata) {
@@ -76,5 +77,4 @@ internal class ResponseMetadataInterceptor : ClientInterceptor {
             }
         }
     }
-
 }

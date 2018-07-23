@@ -19,28 +19,22 @@ package com.google.kgax.grpc
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.ListeningExecutorService
 import com.google.common.util.concurrent.MoreExecutors
-import com.google.common.util.concurrent.SettableFuture
 import com.google.longrunning.GetOperationRequest
 import com.google.longrunning.Operation
 import com.google.longrunning.OperationsGrpc
 import com.google.protobuf.ByteString
 import com.google.protobuf.MessageLite
 import io.grpc.Status
-import io.grpc.stub.AbstractStub
 import java.util.concurrent.Callable
-import java.util.concurrent.CancellationException
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
-/** Block until this operation has completed and returned a result of the given [type]. */
-fun <T : MessageLite> CallResult<Operation>.waitUntilDone(stub: AbstractStub<*>, type: Class<T>) =
-        LongRunningCall.of(this, stub, type).get()
-
 /** Resolves long running operations. */
-class LongRunningCall<T : MessageLite>(private val stub: OperationsGrpc.OperationsFutureStub,
-                                       private val future: ListenableFuture<CallResult<Operation>>,
-                                       private val responseType: Class<T>,
-                                       private val executor: ListeningExecutorService = LongRunningCall.executor
+class LongRunningCall<T : MessageLite>(
+        private val stub: ClientCall<OperationsGrpc.OperationsFutureStub>,
+        private val future: ListenableFuture<CallResult<Operation>>,
+        private val responseType: Class<T>,
+        private val executor: ListeningExecutorService = LongRunningCall.executor
 ) {
 
     /** the underlying operation (null until the operation has completed) */
@@ -54,9 +48,11 @@ class LongRunningCall<T : MessageLite>(private val stub: OperationsGrpc.Operatio
         operation = future.get().body
         while (!operation!!.done) {
             try {
-                operation = stub.getOperation(GetOperationRequest.newBuilder()
-                        .setName(operation!!.name)
-                        .build()).get()
+                operation = stub.executeFuture {
+                    it.getOperation(GetOperationRequest.newBuilder()
+                            .setName(operation!!.name)
+                            .build())
+                }.get().body
             } catch (e: InterruptedException) {
                 /** ignore and try again */
             }
@@ -77,33 +73,19 @@ class LongRunningCall<T : MessageLite>(private val stub: OperationsGrpc.Operatio
     /** Get a future that will resolve when the operation has been completed. */
     fun asFuture(): FutureCall<T> = executor.submit(Callable<CallResult<T>> { waitUntilDone() })
 
+    /** Parse the result of the [op] to the given [type] or throw an error */
+    private fun <T : MessageLite> parseResult(op: Operation, type: Class<T>): T {
+        if (op.error == null || op.error.code == Status.Code.OK.value()) {
+            return type.getMethod("parseFrom",
+                    ByteString::class.java).invoke(null, op.response.value) as T
+        }
+
+        throw RuntimeException("Operation completed with error: ${op.error.code}\n details: ${op.error.message}")
+    }
+
     companion object {
         /** The executor to use for resolving operations/ */
         var executor: ListeningExecutorService = MoreExecutors.listeningDecorator(
                 Executors.newCachedThreadPool())
-
-        fun <T : MessageLite> of(operation: CallResult<Operation>,
-                                 stub: AbstractStub<*>,
-                                 type: Class<T>
-        ): LongRunningCall<T> {
-            val s = OperationsGrpc.newFutureStub(stub.getChannel())
-                    .withExecutor(executor)
-                    .withCallCredentials(stub.getCallOptions().credentials)
-            val future = SettableFuture.create<CallResult<Operation>>()
-            future.set(operation)
-            return LongRunningCall(s, future, type)
-        }
-
-        /** Parse the result of the [op] to the given [type] or throw an error */
-        private fun <T : MessageLite> parseResult(op: Operation, type: Class<T>): T {
-            if (op.error == null || op.error.code == Status.Code.OK.value()) {
-                return type.getMethod("parseFrom",
-                        ByteString::class.java).invoke(null, op.response.value) as T
-            }
-
-            throw RuntimeException("Operation completed with error: ${op.error.code}\n details: ${op.error.message}")
-        }
-
     }
-
 }

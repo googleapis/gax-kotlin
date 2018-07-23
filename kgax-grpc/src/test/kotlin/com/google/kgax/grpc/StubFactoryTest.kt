@@ -56,5 +56,4 @@ class StubFactoryTest {
         assertThat(stub).isNotNull()
         assertThat(stub.callOptions.credentials).isEqualTo(credentials)
     }
-
 }
