@@ -209,7 +209,7 @@ class GrpcClientStubTest {
         return stub
     }
 
-    class TestStub : AbstractStub<TestStub> {
+    private class TestStub : AbstractStub<TestStub> {
         constructor(channel: Channel, options: CallOptions) : super(channel, options)
 
         override fun build(channel: Channel, options: CallOptions): TestStub {

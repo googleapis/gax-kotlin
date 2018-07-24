@@ -22,6 +22,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import io.grpc.CallCredentials
 import io.grpc.Channel
 import io.grpc.ManagedChannel
+import io.grpc.ManagedChannelBuilder
 import io.grpc.auth.MoreCallCredentials
 import io.grpc.okhttp.OkHttpChannelBuilder
 import io.grpc.stub.AbstractStub
@@ -36,6 +37,8 @@ import kotlin.reflect.KClass
  * If a [Channel] is not provided one will be created automatically and you must
  * call [ManagedChannel.shutdown] when you are done using it (i.e. often when your
  * application is about to exit, sleep, etc.)
+ *
+ * The same channel is used by all stubs created by this factory.
  */
 class StubFactory<T : AbstractStub<T>> {
     private val stubType: KClass<T>
@@ -61,15 +64,19 @@ class StubFactory<T : AbstractStub<T>> {
      * This method will create a new channel via the [channel] property. Don't forget to call
      * [ManagedChannel.shutdown] to dispose of the channel when it is no longer needed.
      */
-    constructor (stubType: KClass<T>, host: String, port: Int = 443, enableRetry: Boolean = true) {
-        // construct channel
-        val channelBuilder = OkHttpChannelBuilder.forAddress(host, port)
-        if (enableRetry) {
-            channelBuilder.enableRetry()
-        }
+    constructor (stubType: KClass<T>, host: String, port: Int = 443, enableRetry: Boolean = true):
+            this(stubType, OkHttpChannelBuilder.forAddress(host, port), {
+                if (enableRetry) { enableRetry() }
+            })
 
+    internal constructor(
+            stubType: KClass<T>,
+            builder: ManagedChannelBuilder<*>,
+            init: ManagedChannelBuilder<*>.() -> Unit = {}
+    ) {
         this.stubType = stubType
-        this.channel = channelBuilder.build()
+        builder.apply(init)
+        this.channel = builder.build()
     }
 
     /**
