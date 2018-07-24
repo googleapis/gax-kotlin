@@ -24,9 +24,8 @@ import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.AnalyzeEntitiesResponse
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
+import com.google.kgax.grpc.GrpcClientStub
 import com.google.kgax.grpc.StubFactory
-import com.google.kgax.grpc.get
-import com.google.kgax.grpc.prepare
 
 /**
  * Kotlin example using KGax with gRPC.
@@ -66,11 +65,11 @@ class FutureActivity : AppCompatActivity() {
     }
 
     private class ApiTestTask(
-            val stub: LanguageServiceGrpc.LanguageServiceFutureStub,
+            val stub: GrpcClientStub<LanguageServiceGrpc.LanguageServiceFutureStub>,
             val onResult: (String) -> Unit
     ) : AsyncTask<Unit, Unit, AnalyzeEntitiesResponse>() {
         override fun doInBackground(vararg params: Unit) : AnalyzeEntitiesResponse {
-            val response = stub.prepare().executeFuture { it ->
+            val response = stub.executeFuture { it ->
                 it.analyzeEntities(AnalyzeEntitiesRequest.newBuilder()
                         .setDocument(Document.newBuilder()
                                 .setContent("Hi there Joe")

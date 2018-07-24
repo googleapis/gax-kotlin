@@ -32,7 +32,7 @@ class StubFactoryTest {
         val stub = factory.fromCallCredentials(credentials)
 
         assertThat(stub).isNotNull()
-        assertThat(stub.callOptions.credentials).isEqualTo(credentials)
+        assertThat(stub.options.credentials).isEqualTo(credentials)
     }
 
     @Test
@@ -43,7 +43,7 @@ class StubFactoryTest {
         val stub = factory.fromCallCredentials(credentials)
 
         assertThat(stub).isNotNull()
-        assertThat(stub.callOptions.credentials).isEqualTo(credentials)
+        assertThat(stub.options.credentials).isEqualTo(credentials)
     }
 
     @Test
@@ -54,6 +54,6 @@ class StubFactoryTest {
         val stub = factory.fromCallCredentials(credentials)
 
         assertThat(stub).isNotNull()
-        assertThat(stub.callOptions.credentials).isEqualTo(credentials)
+        assertThat(stub.options.credentials).isEqualTo(credentials)
     }
 }

@@ -27,9 +27,8 @@ import com.google.cloud.speech.v1.RecognitionAudio
 import com.google.cloud.speech.v1.RecognitionConfig
 import com.google.cloud.speech.v1.SpeechGrpc
 import com.google.common.io.ByteStreams
+import com.google.kgax.grpc.GrpcClientStub
 import com.google.kgax.grpc.StubFactory
-import com.google.kgax.grpc.waitUntilDone
-import com.google.kgax.grpc.prepare
 import com.google.protobuf.ByteString
 
 private const val TAG = "APITest"
@@ -42,7 +41,7 @@ private const val TAG = "APITest"
 class LROActivity : AppCompatActivity() {
 
     private val factory = StubFactory(
-            SpeechGrpc.SpeechBlockingStub::class, "speech.googleapis.com")
+            SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com")
 
     private val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
@@ -74,13 +73,13 @@ class LROActivity : AppCompatActivity() {
     }
 
     private class ApiTestTask(
-            val stub: SpeechGrpc.SpeechBlockingStub,
+            val stub: GrpcClientStub<SpeechGrpc.SpeechFutureStub>,
             val audio: ByteString,
             val onResult: (String) -> Unit
     ) : AsyncTask<Unit, Unit, LongRunningRecognizeResponse>() {
         override fun doInBackground(vararg params: Unit) : LongRunningRecognizeResponse {
             // execute a long running operation
-            val operationResponse = stub.prepare().executeBlocking {
+            val lro = stub.executeLongRunning(LongRunningRecognizeResponse::class.java) {
                 it.longRunningRecognize(LongRunningRecognizeRequest.newBuilder()
                         .setAudio(RecognitionAudio.newBuilder()
                                 .setContent(audio)
@@ -93,10 +92,11 @@ class LROActivity : AppCompatActivity() {
                         .build())
             }
 
-            Log.i(TAG, "Waiting for long running operation: ${operationResponse.body.name}")
-
             // wait for the response to complete
-            val (response, _) = operationResponse.waitUntilDone(stub, LongRunningRecognizeResponse::class.java)
+            Log.i(TAG, "Waiting for long running operation...")
+            val (response, _) = lro.get()
+
+            Log.i(TAG, "Operation completed: ${lro.operation?.name}")
             return response
         }
 

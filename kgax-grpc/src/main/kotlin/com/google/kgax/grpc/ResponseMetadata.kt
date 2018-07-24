@@ -51,8 +51,7 @@ open class ResponseMetadata {
     }
 
     companion object {
-        val KEY: CallOptions.Key<ResponseMetadata> =
-                CallOptions.Key.of(CALL_OPTION_METADATA, null)
+        val KEY: CallOptions.Key<ResponseMetadata> = CallOptions.Key.create(CALL_OPTION_METADATA)
     }
 }
 

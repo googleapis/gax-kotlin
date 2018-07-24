@@ -18,8 +18,12 @@ package com.google.kgax.grpc
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.SettableFuture
+import com.google.protobuf.Int32Value
+import com.google.protobuf.StringValue
+import com.nhaarman.mockito_kotlin.any
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.verify
+import com.nhaarman.mockito_kotlin.whenever
 import io.grpc.CallOptions
 import io.grpc.Channel
 import io.grpc.stub.AbstractStub
@@ -28,7 +32,11 @@ import java.util.concurrent.ExecutionException
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
-class ClientCallTest {
+class GrpcClientStubTest {
+
+    fun StringValue(value: String): StringValue = StringValue.newBuilder().setValue(value).build()
+    fun Int32Value(value: Int): Int32Value = Int32Value.newBuilder().setValue(value).build()
+
 
     @Test
     fun `ClientCallOptions remembers metadata`() {
@@ -56,40 +64,41 @@ class ClientCallTest {
 
     @Test
     fun `Can do a blocking call`() {
-        val stub: TestStub = mock()
+        val stub: TestStub = createTestStubMock()
 
-        val call = ClientCall(stub, mock())
+        val call = GrpcClientStub(stub, ClientCallOptions())
         val result = call.executeBlocking { arg ->
             assertThat(arg).isEqualTo(stub)
-            "hey there"
+            StringValue("hey there")
         }
-        assertThat(result.body).isEqualTo("hey there")
+        assertThat(result.body.value).isEqualTo("hey there")
     }
 
     @Test
     fun `Can do a future call`() {
-        val stub: TestStub = mock()
-        val future = SettableFuture.create<String>()
-        future.set("hi")
+        val stub: TestStub = createTestStubMock()
+        val future = SettableFuture.create<StringValue>()
+        future.set(StringValue("hi"))
 
-        val call = ClientCall(stub, mock())
+        val call = GrpcClientStub(stub, ClientCallOptions())
         val result = call.executeFuture { arg ->
             assertThat(arg).isEqualTo(stub)
             future
         }
-        assertThat(result.get().body).isEqualTo("hi")
+        assertThat(result.get().body.value).isEqualTo("hi")
     }
 
     @Test
     fun `Can do a streaming call`() {
-        val stub: TestStub = mock()
-        val inStream: StreamObserver<Int> = mock()
+        val stub: TestStub = createTestStubMock()
+
+        val inStream: StreamObserver<Int32Value> = mock()
         val exception: RuntimeException = mock()
 
         // capture output stream
-        val call = ClientCall(stub, mock())
-        var outStream: StreamObserver<String>? = null
-        fun method(outs: StreamObserver<String>): StreamObserver<Int> {
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        var outStream: StreamObserver<StringValue>? = null
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
             outStream = outs
             return inStream
         }
@@ -102,20 +111,20 @@ class ClientCallTest {
         val responses = mutableListOf<String>()
         val exceptions = mutableListOf<Throwable>()
         var complete = false
-        result.responses.onNext = { responses.add(it) }
+        result.responses.onNext = { responses.add(it.value) }
         result.responses.onError = { exceptions.add(it) }
         result.responses.onCompleted = { complete = true }
-        result.requests.send(1)
-        result.requests.send(2)
+        result.requests.send(Int32Value(1))
+        result.requests.send(Int32Value(2))
 
         // fake output from server
-        outStream?.onNext("one")
-        outStream?.onNext("two")
+        outStream?.onNext(StringValue("one"))
+        outStream?.onNext(StringValue("two"))
         outStream?.onError(exception)
         outStream?.onCompleted()
 
-        verify(inStream).onNext(1)
-        verify(inStream).onNext(2)
+        verify(inStream).onNext(Int32Value(1))
+        verify(inStream).onNext(Int32Value(2))
         assertThat(responses).containsExactly("one", "two")
         assertThat(exceptions).containsExactly(exception)
         assertThat(complete).isTrue()
@@ -124,13 +133,13 @@ class ClientCallTest {
     @Test
     fun `Can do a client streaming call`() {
         listOf(null, RuntimeException("failed")).forEach { ex ->
-            val stub: TestStub = mock()
-            val inStream: StreamObserver<Int> = mock()
+            val stub: TestStub = createTestStubMock()
+            val inStream: StreamObserver<Int32Value> = mock()
 
             // capture output stream
-            val call = ClientCall(stub, mock())
-            var outStream: StreamObserver<String>? = null
-            fun method(outs: StreamObserver<String>): StreamObserver<Int> {
+            val call = GrpcClientStub(stub, ClientCallOptions())
+            var outStream: StreamObserver<StringValue>? = null
+            fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
                 outStream = outs
                 return inStream
             }
@@ -140,36 +149,36 @@ class ClientCallTest {
                 ::method
             }
 
-            result.requests.send(10)
-            result.requests.send(20)
+            result.requests.send(Int32Value.newBuilder().setValue(10).build())
+            result.requests.send(Int32Value.newBuilder().setValue(20).build())
 
             // fake output from server
             if (ex != null) {
                 outStream?.onError(ex)
             } else {
-                outStream?.onNext("abc")
+                outStream?.onNext(StringValue("abc"))
             }
             outStream?.onCompleted()
 
-            verify(inStream).onNext(10)
-            verify(inStream).onNext(20)
+            verify(inStream).onNext(Int32Value(10))
+            verify(inStream).onNext(Int32Value(20))
             if (ex != null) {
                 assertFailsWith<ExecutionException>("failed") { result.response.get() }
             } else {
-                assertThat(result.response.get()).isEqualTo("abc")
+                assertThat(result.response.get().value).isEqualTo("abc")
             }
         }
     }
 
     @Test
     fun `Can do a server streaming call`() {
-        val stub: TestStub = mock()
+        val stub: TestStub = createTestStubMock()
         val exception: RuntimeException = mock()
 
         // capture output stream
-        val call = ClientCall(stub, mock())
-        var outStream: StreamObserver<String>? = null
-        val result = call.executeServerStreaming { it, observer: StreamObserver<String> ->
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        var outStream: StreamObserver<StringValue>? = null
+        val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
             assertThat(it).isEqualTo(stub)
             outStream = observer
         }
@@ -177,13 +186,13 @@ class ClientCallTest {
         val responses = mutableListOf<String>()
         val exceptions = mutableListOf<Throwable>()
         var complete = false
-        result.responses.onNext = { responses.add(it) }
+        result.responses.onNext = { responses.add(it.value) }
         result.responses.onError = { exceptions.add(it) }
         result.responses.onCompleted = { complete = true }
 
         // fake output from server
-        outStream?.onNext("one")
-        outStream?.onNext("two")
+        outStream?.onNext(StringValue("one"))
+        outStream?.onNext(StringValue("two"))
         outStream?.onError(exception)
         outStream?.onCompleted()
 
@@ -192,8 +201,15 @@ class ClientCallTest {
         assertThat(complete).isTrue()
     }
 
+    private fun createTestStubMock(): TestStub {
+        val stub: TestStub = mock()
+        whenever(stub.withInterceptors(any())).thenReturn(stub)
+        whenever(stub.withCallCredentials(any())).thenReturn(stub)
+        whenever(stub.withOption(any(), any<Any>())).thenReturn(stub)
+        return stub
+    }
+
     class TestStub : AbstractStub<TestStub> {
-        constructor(channel: Channel) : super(channel)
         constructor(channel: Channel, options: CallOptions) : super(channel, options)
 
         override fun build(channel: Channel, options: CallOptions): TestStub {

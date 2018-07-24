@@ -23,6 +23,7 @@ import android.widget.TextView
 import com.google.api.MonitoredResource
 import com.google.kgax.Page
 import com.google.kgax.ServiceAccount
+import com.google.kgax.grpc.GrpcClientStub
 import com.google.kgax.grpc.StubFactory
 import com.google.kgax.pager
 import com.google.logging.v2.ListLogEntriesRequest
@@ -77,7 +78,7 @@ class PagingActivity : AppCompatActivity() {
     }
 
     private class ApiTestTask(
-            val stub: LoggingServiceV2Grpc.LoggingServiceV2BlockingStub,
+            val stub: GrpcClientStub<LoggingServiceV2Grpc.LoggingServiceV2BlockingStub>,
             val projectId: String,
             val onResult: (String) -> Unit
     ) : AsyncTask<Unit, Unit, String>() {
@@ -97,11 +98,13 @@ class PagingActivity : AppCompatActivity() {
                         .setTextPayload("log number: $i")
                         .build())
             }
-            stub.writeLogEntries(writeRequest.build())
+            stub.executeBlocking { it.writeLogEntries(writeRequest.build()) }
 
             // create a pager
             val pager = pager<ListLogEntriesRequest, ListLogEntriesResponse, LogEntry> {
-                method = stub::listLogEntries
+                method = { request ->
+                    stub.executeBlocking { it.listLogEntries(request) }.body
+                }
                 initialRequest = {
                     ListLogEntriesRequest.newBuilder()
                             .addResourceNames(project)

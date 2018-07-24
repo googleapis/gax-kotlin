@@ -19,7 +19,6 @@ package com.google.kgax.examples.grpc
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.HandlerThread
 import android.support.v4.app.ActivityCompat
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
@@ -30,7 +29,6 @@ import com.google.cloud.speech.v1.StreamingRecognitionConfig
 import com.google.cloud.speech.v1.StreamingRecognizeRequest
 import com.google.kgax.examples.grpc.util.AudioEmitter
 import com.google.kgax.grpc.StubFactory
-import com.google.kgax.grpc.prepare
 
 private const val TAG = "APITest"
 
@@ -120,7 +118,9 @@ class StreamingActivity : AppCompatActivity() {
         factory.shutdown()
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(requestCode: Int,
+                                            permissions: Array<String>,
+                                            grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         when (requestCode) {

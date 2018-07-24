@@ -25,13 +25,10 @@ import io.grpc.ManagedChannel
 import io.grpc.auth.MoreCallCredentials
 import io.grpc.okhttp.OkHttpChannelBuilder
 import io.grpc.stub.AbstractStub
-import io.grpc.stub.MetadataUtils
 import io.grpc.stub.StreamObserver
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
 import kotlin.reflect.KClass
-
-inline fun <T> ListenableFuture<T>.get(handler: (T) -> Unit) = handler(this.get())
 
 /**
  * Factory for gRPC stubs to simplify their construction.
@@ -79,40 +76,26 @@ class StubFactory<T : AbstractStub<T>> {
      * Creates a stub from a service account JSON [keyFile] with the provided [oauthScopes]
      * and any additional [options].
      */
-    @JvmOverloads
-    fun fromServiceAccount(
-        keyFile: InputStream,
-        oauthScopes: List<String>,
-        options: ClientOptions = ClientOptions()
-    ) =
+    fun fromServiceAccount(keyFile: InputStream, oauthScopes: List<String>) =
             fromCallCredentials(MoreCallCredentials.from(
-                    GoogleCredentials.fromStream(keyFile).createScoped(oauthScopes)), options)
+                    GoogleCredentials.fromStream(keyFile).createScoped(oauthScopes)))
 
     /**
      * Creates a stub from a access [token] with the provided [oauthScopes] and any additional
      * [options].
      */
-    @JvmOverloads
-    fun fromAccessToken(
-        token: AccessToken,
-        oauthScopes: List<String>,
-        options: ClientOptions = ClientOptions()
-    ) =
+    fun fromAccessToken(token: AccessToken, oauthScopes: List<String>) =
             fromCallCredentials(MoreCallCredentials.from(
-                    GoogleCredentials.create(token).createScoped(oauthScopes)), options)
+                    GoogleCredentials.create(token).createScoped(oauthScopes)))
 
-    internal fun fromCallCredentials(
-        credentials: CallCredentials,
-        options: ClientOptions = ClientOptions()
-    ): T {
+    internal fun fromCallCredentials(creds: CallCredentials): GrpcClientStub<T>{
         // instantiate stub
         try {
             val constructor = stubType.java
                     .declaringClass
                     .getMethod(getFactoryMethodName(stubType.java), Channel::class.java)
-            return (constructor.invoke(null, channel) as T)
-                    .withCallCredentials(credentials)
-                    .decorate(options)
+            return GrpcClientStub(constructor.invoke(null, channel) as T,
+                    ClientCallOptions(credentials = creds))
         } catch (e: NoSuchMethodException) {
             throw IllegalArgumentException("Invalid stub type (missing static factory method)", e)
         } catch (ex: Exception) {
@@ -145,77 +128,4 @@ class StubFactory<T : AbstractStub<T>> {
             else -> "newBlockingStub"
         }
     }
-}
-
-/**
- * Apply the extra [options] to decorate the stub.
- *
- * The default value is recommended for most applications, which includes support for:
- *   + [ResponseMetadata]
- */
-fun <T : AbstractStub<T>> T.decorate(options: ClientOptions = ClientOptions()): T {
-    var ret = this
-    if (options.enableResponseMetadata) {
-        ret = ret.withInterceptors(ResponseMetadataInterceptor())
-    }
-    return ret
-}
-
-/** Apply the extra [options] to the stub and configure authentication with the given [credentials]. */
-fun <T : AbstractStub<T>> T.decorate(credentials: GoogleCredentials, options: ClientOptions = ClientOptions()): T =
-        this.withCallCredentials(MoreCallCredentials.from(credentials)).decorate(options)
-
-/**
- * Prepare a decorated call to create a [ClientCall]. For example:
- *
- * ```
- * val response = stub.prepare {
- *     withMetadata("foo", listOf("bar"))
- *     withMetadata("1", listOf("a", "b"))
- * }.executeBlocking {
- *     it.myBlockingMethod(...)
- * }
- * print("${response.body}")
- * ```
- *
- * Use this method with the appropriate [ClientCall] method, such as [ClientCall.executeBlocking]
- * instead of calling methods on the gRPC stubs directly when you want to use the additional
- * functionality provided by this library.
- */
-fun <T : AbstractStub<T>> T.prepare(init: ClientCallOptions.Builder.() -> Unit = {}): ClientCall<T> {
-    val builder = ClientCallOptions.Builder()
-    builder.init()
-    return this.prepare(ClientCallOptions(builder))
-}
-
-/** Prepare a decorated call */
-fun <T : AbstractStub<T>> T.prepare(options: ClientCallOptions): ClientCall<T> {
-    val opts = ClientCallOptions(options)
-    opts.responseMetadata = ResponseMetadata()
-
-    // prepare call
-    var stub = this.withOption(ResponseMetadata.KEY, opts.responseMetadata)
-
-    // add request metadata
-    if (!opts.requestMetadata.isEmpty()) {
-        val header = io.grpc.Metadata()
-        for ((k, v) in opts.requestMetadata) {
-            val key = io.grpc.Metadata.Key.of(k, io.grpc.Metadata.ASCII_STRING_MARSHALLER)
-            v.forEach { header.put(key, it) }
-        }
-        stub = MetadataUtils.attachHeaders(stub, header)
-    }
-
-    // add auth
-    if (opts.credentials != null) {
-        stub = stub.withCallCredentials(opts.credentials)
-    }
-
-    // add advanced features
-    if (opts.interceptors.any()) {
-        stub = stub.withInterceptors(*opts.interceptors.toTypedArray())
-    }
-
-    // save the options
-    return ClientCall(stub, opts)
 }

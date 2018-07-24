@@ -43,7 +43,7 @@ class LongRunningCallTest {
         val futureDone: ListenableFuture<CallResult<Operation>> = mock {
             on { get() }.thenReturn(resultDone)
         }
-        val client: ClientCall<OperationsGrpc.OperationsFutureStub> = mock {
+        val grpcClient: GrpcClientStub<OperationsGrpc.OperationsFutureStub> = mock {
             on { executeFuture<Operation>(any()) }
                     .thenReturn(future1)
                     .thenReturn(futureDone)
@@ -54,11 +54,11 @@ class LongRunningCallTest {
                 .setName("test_op")
                 .setDone(false)
                 .build(), mock()))
-        val lro = LongRunningCall(client, future, Operation::class.java)
+        val lro = LongRunningCall(grpcClient, future, Operation::class.java)
         val result = lro.waitUntilDone()
 
         assertThat(result.body).isInstanceOf(Operation::class.java)
 
-        verify(client, times(2)).executeFuture<Operation>(any())
+        verify(grpcClient, times(2)).executeFuture<Operation>(any())
     }
 }

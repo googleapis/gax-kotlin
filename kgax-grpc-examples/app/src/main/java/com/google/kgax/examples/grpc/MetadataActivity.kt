@@ -19,15 +19,12 @@ package com.google.kgax.examples.grpc
 import android.os.AsyncTask
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
-import android.util.Log
 import android.widget.TextView
 import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
+import com.google.kgax.grpc.GrpcClientStub
 import com.google.kgax.grpc.StubFactory
-import com.google.kgax.grpc.prepare
-
-private const val TAG = "APITest"
 
 /**
  * Kotlin example showcasing request & response metadata using KGax with gRPC.
@@ -65,7 +62,7 @@ class MetadataActivity : AppCompatActivity() {
     }
 
     private class ApiTestTask(
-            val stub: LanguageServiceGrpc.LanguageServiceBlockingStub,
+            val stub: GrpcClientStub<LanguageServiceGrpc.LanguageServiceBlockingStub>,
             val onResult: (String) -> Unit
     ) : AsyncTask<Unit, Unit, String>() {
         override fun doInBackground(vararg params: Unit): String {

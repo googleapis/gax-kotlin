@@ -31,7 +31,7 @@ import java.util.concurrent.Executors
 
 /** Resolves long running operations. */
 class LongRunningCall<T : MessageLite>(
-        private val stub: ClientCall<OperationsGrpc.OperationsFutureStub>,
+        private val stub: GrpcClientStub<OperationsGrpc.OperationsFutureStub>,
         private val future: ListenableFuture<CallResult<Operation>>,
         private val responseType: Class<T>,
         private val executor: ListeningExecutorService = LongRunningCall.executor

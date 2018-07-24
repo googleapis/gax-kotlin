@@ -23,11 +23,14 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import com.google.kgax.Page
+import com.google.longrunning.Operation
+import com.google.longrunning.OperationsGrpc
 import com.google.protobuf.MessageLite
 import io.grpc.CallCredentials
 import io.grpc.ClientInterceptor
 import io.grpc.auth.MoreCallCredentials
 import io.grpc.stub.AbstractStub
+import io.grpc.stub.MetadataUtils
 import io.grpc.stub.StreamObserver
 import java.io.InputStream
 import java.util.concurrent.Executor
@@ -36,93 +39,8 @@ import java.util.concurrent.Executor
 annotation class DecoratorMarker
 
 /**
- * Features that can be enabled on the gRPC stubs.
- *
- * [enableResponseMetadata] captures body metadata that can be used with [prepare] and
- * returned to the caller as [ResponseMetadata].
- */
-class ClientOptions(val enableResponseMetadata: Boolean = true)
-
-/**
- * Decorated call options. The settings apply on a per-call level.
- */
-class ClientCallOptions constructor(
-    val credentials: CallCredentials? = null,
-    internal val requestMetadata: Map<String, List<String>> = mapOf(),
-    internal val initialStreamRequests: List<Any> = listOf(),
-    internal val interceptors: List<ClientInterceptor> = listOf()
-) {
-    internal var responseMetadata: ResponseMetadata? = null
-
-    constructor(opts: ClientCallOptions) : this(opts.credentials, opts.requestMetadata,
-            opts.initialStreamRequests, opts.interceptors)
-
-    constructor(builder: Builder) : this(builder.credentials, builder.requestMetadata,
-            builder.initialStreamRequests, builder.interceptors)
-
-    @DecoratorMarker
-    class Builder(
-        internal var credentials: CallCredentials? = null,
-        internal val requestMetadata: MutableMap<String, List<String>> = mutableMapOf(),
-        internal val initialStreamRequests: MutableList<Any> = mutableListOf(),
-        internal val interceptors: MutableList<ClientInterceptor> = mutableListOf()
-    ) {
-
-        constructor(opts: ClientCallOptions) : this(opts.credentials,
-                opts.requestMetadata.toMutableMap(),
-                opts.initialStreamRequests.toMutableList(),
-                opts.interceptors.toMutableList())
-
-        /** Set service account credentials for authentication */
-        fun withServiceAccountCredentials(
-            keyFile: InputStream,
-            scopes: List<String> = listOf()
-        ) {
-            val auth = if (scopes.isEmpty()) {
-                GoogleCredentials.fromStream(keyFile)
-            } else {
-                GoogleCredentials.fromStream(keyFile).createScoped(scopes)
-            }
-            credentials = MoreCallCredentials.from(auth)
-        }
-
-        /** Set the access token to use for authentication */
-        fun withAccessToken(token: AccessToken, scopes: List<String> = listOf()) {
-            val auth = if (scopes.isEmpty()) {
-                GoogleCredentials.create(token)
-            } else {
-                GoogleCredentials.create(token).createScoped(scopes)
-            }
-            credentials = MoreCallCredentials.from(auth)
-        }
-
-        /** Append metadata to the call */
-        fun withMetadata(key: String, value: List<String>) {
-            requestMetadata[key] = value
-        }
-
-        /** Omit metadata from the call */
-        fun withoutMetadata(key: String) {
-            requestMetadata.remove(key)
-        }
-
-        /** For outbound streams, send an initial message as soon as possible */
-        fun <T : MessageLite> withInitialRequest(request: T) {
-            initialStreamRequests.add(request)
-        }
-
-        /** Append arbitrary interceptors (for advanced use) */
-        fun withInterceptor(interceptor: ClientInterceptor) {
-            interceptors.add(interceptor)
-        }
-
-        fun build() = ClientCallOptions(this)
-    }
-}
-
-/**
  * A convenience wrapper for gRPC stubs that enables ease of use and the
- * addition of some additional functionality.
+ * addition of some non-native functionality.
  *
  * You don't typically need to create instance of this class directly. Instead use
  * the [prepare] method that this library defines for all gRPC stubs, which will
@@ -132,10 +50,66 @@ class ClientCallOptions constructor(
  * ```
  * val stub = StubFactory(MyBlockingStub::class, "host.example.com")
  *                .fromServiceAccount(keyFile, listOf("https://host.example.com/auth/my-scope"))
- * val response = stub.prepare().executeBlocking { it -> it.myMethod(...) }
+ * val response = stub.executeBlocking { it -> it.someApiMethod(...) }
  * ```
  */
-class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOptions) {
+class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCallOptions) {
+
+    var stub: T
+        private set
+
+    init {
+        // add response metadata
+        stub = originalStub
+                .withInterceptors(ResponseMetadataInterceptor())
+                .withOption(ResponseMetadata.KEY, options.responseMetadata)
+
+        // add request metadata
+        if (!options.requestMetadata.isEmpty()) {
+            val header = io.grpc.Metadata()
+            for ((k, v) in options.requestMetadata) {
+                val key = io.grpc.Metadata.Key.of(k, io.grpc.Metadata.ASCII_STRING_MARSHALLER)
+                v.forEach { header.put(key, it) }
+            }
+            stub = MetadataUtils.attachHeaders(stub, header)
+        }
+
+        // add auth
+        if (options.credentials != null) {
+            stub = stub.withCallCredentials(options.credentials)
+        }
+
+        // add advanced features
+        if (options.interceptors.any()) {
+            stub = stub.withInterceptors(*options.interceptors.toTypedArray())
+        }
+    }
+
+    /**
+     * Prepare a decorated call to create a [GrpcClientStub]. For example:
+     *
+     * ```
+     * val response = stub.prepare {
+     *     withMetadata("foo", listOf("bar"))
+     *     withMetadata("1", listOf("a", "b"))
+     * }.executeBlocking {
+     *     it.myBlockingMethod(...)
+     * }
+     * print("${response.body}")
+     * ```
+     *
+     * Use this method with the appropriate [GrpcClientStub] method, such as [GrpcClientStub.executeBlocking]
+     * instead of calling methods on the gRPC stubs directly when you want to use the additional
+     * functionality provided by this library.
+     */
+    fun prepare(init: ClientCallOptions.Builder.() -> Unit = {}): GrpcClientStub<T> {
+        val builder = ClientCallOptions.Builder()
+        builder.init()
+        return GrpcClientStub(stub, ClientCallOptions(builder))
+    }
+
+    /** Prepare a decorated call */
+    fun prepare(options: ClientCallOptions) = GrpcClientStub(stub, ClientCallOptions(options))
 
     /**
      * Execute a blocking call. For example:
@@ -153,9 +127,9 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
      * first parameter. The result along with any additional information, such as
      * [ResponseMetadata], will be returned.
      */
-    fun <RespT> executeBlocking(method: (T) -> RespT): CallResult<RespT> {
+    fun <RespT : MessageLite> executeBlocking(method: (T) -> RespT): CallResult<RespT> {
         val response = method(stub)
-        return CallResult(response, options.responseMetadata ?: ResponseMetadata())
+        return CallResult(response, options.responseMetadata)
     }
 
     /**
@@ -177,13 +151,40 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
      * Use [ListenableFuture.get] to block for the result or [ListenableFuture.addListener]
      * to access the result asynchronously.
      */
-    fun <RespT> executeFuture(
+    fun <RespT : MessageLite> executeFuture(
         method: (T) -> ListenableFuture<RespT>
     ): ListenableFuture<CallResult<RespT>> =
             Futures.transform(method(stub)) {
                 CallResult(it ?: throw IllegalStateException("Future returned null value"),
-                        options.responseMetadata ?: ResponseMetadata())
+                        options.responseMetadata)
             }
+
+    /**
+     * Execute a long running operation. For example:
+     *
+     * ```
+     * val lro = stub.executeLongRunning(MyLongRunningResponse::class.java) {
+     *     it.myLongRunningMethod(...)
+     * }
+     * lro.get { print("${it.body}") }
+     * ```
+     *
+     * The [method] lambda should perform a future method call on the stub given as the
+     * first parameter. The result along with any additional information, such as
+     * [ResponseMetadata], will be returned as a [LongRunningCall]. The [type] given
+     * must match the return type of the Operation.
+     */
+    fun <RespT : MessageLite> executeLongRunning(
+            type: Class<RespT>,
+            method: (T) -> ListenableFuture<Operation>
+    ): LongRunningCall<RespT> {
+        val operationsStub = GrpcClientStub(OperationsGrpc.newFutureStub(stub.channel), options)
+        val future = Futures.transform(method(stub)) {
+            CallResult(it ?: throw IllegalStateException("Future returned null value"),
+                    options.responseMetadata)
+        }
+        return LongRunningCall(operationsStub, future, type)
+    }
 
     /**
      * Execute a bidirectional streaming call. For example:
@@ -210,7 +211,7 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
      * background executor. Set the optional [ResponseStream.executor] parameter as needed
      * (i.e. to have them executed on the main thread, etc.)
      */
-    fun <ReqT, RespT> executeStreaming(
+    fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): StreamingCall<ReqT, RespT> {
         val responseStream = ResponseStreamImpl<RespT>()
@@ -256,7 +257,7 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
      * will provide an outbound stream for requests to be sent to the server and a future for
      * the server's response.
      */
-    fun <ReqT, RespT> executeClientStreaming(
+    fun <ReqT : MessageLite, RespT : MessageLite> executeClientStreaming(
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): ClientStreamingCall<ReqT, RespT> {
         val responseFuture = SettableFuture.create<RespT>()
@@ -306,7 +307,7 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
      * background executor. Set the optional [ResponseStream.executor] parameter as needed
      * (i.e. to have them executed on the main thread, etc.)
      */
-    fun <RespT> executeServerStreaming(
+    fun <RespT : MessageLite> executeServerStreaming(
         method: (T, StreamObserver<RespT>) -> Unit
     ): ServerStreamingCall<RespT> {
         val responseStream = ResponseStreamImpl<RespT>()
@@ -322,6 +323,93 @@ class ClientCall<T : AbstractStub<T>>(val stub: T, val options: ClientCallOption
         })
 
         return ServerStreamingCall(responseStream)
+    }
+}
+
+/** see [GrpcClientStub.prepare] */
+fun <T : AbstractStub<T>> T.prepare(init: ClientCallOptions.Builder.() -> Unit = {}): GrpcClientStub<T> {
+    val builder = ClientCallOptions.Builder()
+    builder.init()
+    return GrpcClientStub(this, ClientCallOptions(builder))
+}
+
+/** see [GrpcClientStub.prepare] */
+fun <T : AbstractStub<T>> T.prepare(options: ClientCallOptions) = GrpcClientStub(this, options)
+
+/**
+ * Decorated call options. The settings apply on a per-call level.
+ */
+class ClientCallOptions constructor(
+        val credentials: CallCredentials? = null,
+        internal val requestMetadata: Map<String, List<String>> = mapOf(),
+        internal val initialStreamRequests: List<Any> = listOf(),
+        internal val interceptors: List<ClientInterceptor> = listOf()
+) {
+    internal val responseMetadata: ResponseMetadata = ResponseMetadata()
+
+    constructor(opts: ClientCallOptions) : this(opts.credentials, opts.requestMetadata,
+            opts.initialStreamRequests, opts.interceptors)
+
+    constructor(builder: Builder) : this(builder.credentials, builder.requestMetadata,
+            builder.initialStreamRequests, builder.interceptors)
+
+    @DecoratorMarker
+    class Builder(
+            internal var credentials: CallCredentials? = null,
+            internal val requestMetadata: MutableMap<String, List<String>> = mutableMapOf(),
+            internal val initialStreamRequests: MutableList<Any> = mutableListOf(),
+            internal val interceptors: MutableList<ClientInterceptor> = mutableListOf()
+    ) {
+
+        constructor(opts: ClientCallOptions) : this(opts.credentials,
+                opts.requestMetadata.toMutableMap(),
+                opts.initialStreamRequests.toMutableList(),
+                opts.interceptors.toMutableList())
+
+        /** Set service account credentials for authentication */
+        fun withServiceAccountCredentials(
+                keyFile: InputStream,
+                scopes: List<String> = listOf()
+        ) {
+            val auth = if (scopes.isEmpty()) {
+                GoogleCredentials.fromStream(keyFile)
+            } else {
+                GoogleCredentials.fromStream(keyFile).createScoped(scopes)
+            }
+            credentials = MoreCallCredentials.from(auth)
+        }
+
+        /** Set the access token to use for authentication */
+        fun withAccessToken(token: AccessToken, scopes: List<String> = listOf()) {
+            val auth = if (scopes.isEmpty()) {
+                GoogleCredentials.create(token)
+            } else {
+                GoogleCredentials.create(token).createScoped(scopes)
+            }
+            credentials = MoreCallCredentials.from(auth)
+        }
+
+        /** Append metadata to the call */
+        fun withMetadata(key: String, value: List<String>) {
+            requestMetadata[key] = value
+        }
+
+        /** Omit metadata from the call */
+        fun withoutMetadata(key: String) {
+            requestMetadata.remove(key)
+        }
+
+        /** For outbound streams, send an initial message as soon as possible */
+        fun <T : MessageLite> withInitialRequest(request: T) {
+            initialStreamRequests.add(request)
+        }
+
+        /** Append arbitrary interceptors (for advanced use) */
+        fun withInterceptor(interceptor: ClientInterceptor) {
+            interceptors.add(interceptor)
+        }
+
+        fun build() = ClientCallOptions(this)
     }
 }
 
@@ -386,3 +474,5 @@ internal class ResponseStreamImpl<RespT>(
     override var onCompleted: () -> Unit = {},
     override var executor: Executor? = null
 ) : ResponseStream<RespT>
+
+inline fun <T> ListenableFuture<T>.get(handler: (T) -> Unit) = handler(this.get())
