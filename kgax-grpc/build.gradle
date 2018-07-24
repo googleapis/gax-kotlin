@@ -113,7 +113,7 @@ jar {
 }
 
 jacoco {
-    toolVersion = "0.7.9"
+    toolVersion = "0.8.1"
 }
 
 jacocoTestReport {
@@ -124,9 +124,15 @@ jacocoTestReport {
     sourceDirectories = files([
             "src/main/kotlin"
     ])
+    afterEvaluate {
+        classDirectories = files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: ['com/google/bytestream/**', 'com/google/longrunning/**'])
+        })
+    }
 }
 
 check.dependsOn jacocoTestReport
+test.finalizedBy(project.tasks.jacocoTestReport)
 
 task ktlint(type: JavaExec, group: "verification") {
     description = "Check Kotlin code style."
