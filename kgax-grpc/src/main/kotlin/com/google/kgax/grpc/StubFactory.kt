@@ -70,9 +70,9 @@ class StubFactory<T : AbstractStub<T>> {
             })
 
     internal constructor(
-            stubType: KClass<T>,
-            builder: ManagedChannelBuilder<*>,
-            init: ManagedChannelBuilder<*>.() -> Unit = {}
+        stubType: KClass<T>,
+        builder: ManagedChannelBuilder<*>,
+        init: ManagedChannelBuilder<*>.() -> Unit = {}
     ) {
         this.stubType = stubType
         builder.apply(init)
@@ -95,7 +95,7 @@ class StubFactory<T : AbstractStub<T>> {
             fromCallCredentials(MoreCallCredentials.from(
                     GoogleCredentials.create(token).createScoped(oauthScopes)))
 
-    internal fun fromCallCredentials(creds: CallCredentials): GrpcClientStub<T>{
+    internal fun fromCallCredentials(creds: CallCredentials): GrpcClientStub<T> {
         // instantiate stub
         try {
             val constructor = stubType.java

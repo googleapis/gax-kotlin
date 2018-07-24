@@ -37,7 +37,6 @@ class GrpcClientStubTest {
     fun StringValue(value: String): StringValue = StringValue.newBuilder().setValue(value).build()
     fun Int32Value(value: Int): Int32Value = Int32Value.newBuilder().setValue(value).build()
 
-
     @Test
     fun `ClientCallOptions remembers metadata`() {
         val options = ClientCallOptions.Builder()

@@ -175,8 +175,8 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
      * must match the return type of the Operation.
      */
     fun <RespT : MessageLite> executeLongRunning(
-            type: Class<RespT>,
-            method: (T) -> ListenableFuture<Operation>
+        type: Class<RespT>,
+        method: (T) -> ListenableFuture<Operation>
     ): LongRunningCall<RespT> {
         val operationsStub = GrpcClientStub(OperationsGrpc.newFutureStub(stub.channel), options)
         val future = Futures.transform(method(stub)) {
@@ -340,10 +340,10 @@ fun <T : AbstractStub<T>> T.prepare(options: ClientCallOptions) = GrpcClientStub
  * Decorated call options. The settings apply on a per-call level.
  */
 class ClientCallOptions constructor(
-        val credentials: CallCredentials? = null,
-        internal val requestMetadata: Map<String, List<String>> = mapOf(),
-        internal val initialStreamRequests: List<Any> = listOf(),
-        internal val interceptors: List<ClientInterceptor> = listOf()
+    val credentials: CallCredentials? = null,
+    internal val requestMetadata: Map<String, List<String>> = mapOf(),
+    internal val initialStreamRequests: List<Any> = listOf(),
+    internal val interceptors: List<ClientInterceptor> = listOf()
 ) {
     internal val responseMetadata: ResponseMetadata = ResponseMetadata()
 
@@ -355,10 +355,10 @@ class ClientCallOptions constructor(
 
     @DecoratorMarker
     class Builder(
-            internal var credentials: CallCredentials? = null,
-            internal val requestMetadata: MutableMap<String, List<String>> = mutableMapOf(),
-            internal val initialStreamRequests: MutableList<Any> = mutableListOf(),
-            internal val interceptors: MutableList<ClientInterceptor> = mutableListOf()
+        internal var credentials: CallCredentials? = null,
+        internal val requestMetadata: MutableMap<String, List<String>> = mutableMapOf(),
+        internal val initialStreamRequests: MutableList<Any> = mutableListOf(),
+        internal val interceptors: MutableList<ClientInterceptor> = mutableListOf()
     ) {
 
         constructor(opts: ClientCallOptions) : this(opts.credentials,
@@ -368,8 +368,8 @@ class ClientCallOptions constructor(
 
         /** Set service account credentials for authentication */
         fun withServiceAccountCredentials(
-                keyFile: InputStream,
-                scopes: List<String> = listOf()
+            keyFile: InputStream,
+            scopes: List<String> = listOf()
         ) {
             val auth = if (scopes.isEmpty()) {
                 GoogleCredentials.fromStream(keyFile)
