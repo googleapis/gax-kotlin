@@ -64,10 +64,12 @@ class StubFactory<T : AbstractStub<T>> {
      * This method will create a new channel via the [channel] property. Don't forget to call
      * [ManagedChannel.shutdown] to dispose of the channel when it is no longer needed.
      */
-    constructor (stubType: KClass<T>, host: String, port: Int = 443, enableRetry: Boolean = true):
-            this(stubType, OkHttpChannelBuilder.forAddress(host, port), {
-                if (enableRetry) { enableRetry() }
-            })
+    constructor (stubType: KClass<T>, host: String, port: Int = 443, enableRetry: Boolean = true) :
+        this(stubType, OkHttpChannelBuilder.forAddress(host, port), {
+            if (enableRetry) {
+                enableRetry()
+            }
+        })
 
     internal constructor(
         stubType: KClass<T>,
@@ -84,25 +86,33 @@ class StubFactory<T : AbstractStub<T>> {
      * and any additional [options].
      */
     fun fromServiceAccount(keyFile: InputStream, oauthScopes: List<String>) =
-            fromCallCredentials(MoreCallCredentials.from(
-                    GoogleCredentials.fromStream(keyFile).createScoped(oauthScopes)))
+        fromCallCredentials(
+            MoreCallCredentials.from(
+                GoogleCredentials.fromStream(keyFile).createScoped(oauthScopes)
+            )
+        )
 
     /**
      * Creates a stub from a access [token] with the provided [oauthScopes] and any additional
      * [options].
      */
     fun fromAccessToken(token: AccessToken, oauthScopes: List<String>) =
-            fromCallCredentials(MoreCallCredentials.from(
-                    GoogleCredentials.create(token).createScoped(oauthScopes)))
+        fromCallCredentials(
+            MoreCallCredentials.from(
+                GoogleCredentials.create(token).createScoped(oauthScopes)
+            )
+        )
 
     internal fun fromCallCredentials(creds: CallCredentials): GrpcClientStub<T> {
         // instantiate stub
         try {
             val constructor = stubType.java
-                    .declaringClass
-                    .getMethod(getFactoryMethodName(stubType.java), Channel::class.java)
-            return GrpcClientStub(constructor.invoke(null, channel) as T,
-                    ClientCallOptions(credentials = creds))
+                .declaringClass
+                .getMethod(getFactoryMethodName(stubType.java), Channel::class.java)
+            return GrpcClientStub(
+                constructor.invoke(null, channel) as T,
+                ClientCallOptions(credentials = creds)
+            )
         } catch (e: NoSuchMethodException) {
             throw IllegalArgumentException("Invalid stub type (missing static factory method)", e)
         } catch (ex: Exception) {

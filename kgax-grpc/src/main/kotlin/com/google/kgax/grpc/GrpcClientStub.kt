@@ -61,8 +61,8 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     init {
         // add response metadata
         stub = originalStub
-                .withInterceptors(ResponseMetadataInterceptor())
-                .withOption(ResponseMetadata.KEY, options.responseMetadata)
+            .withInterceptors(ResponseMetadataInterceptor())
+            .withOption(ResponseMetadata.KEY, options.responseMetadata)
 
         // add request metadata
         if (!options.requestMetadata.isEmpty()) {
@@ -154,10 +154,12 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     fun <RespT : MessageLite> executeFuture(
         method: (T) -> ListenableFuture<RespT>
     ): ListenableFuture<CallResult<RespT>> =
-            Futures.transform(method(stub)) {
-                CallResult(it ?: throw IllegalStateException("Future returned null value"),
-                        options.responseMetadata)
-            }
+        Futures.transform(method(stub)) {
+            CallResult(
+                it ?: throw IllegalStateException("Future returned null value"),
+                options.responseMetadata
+            )
+        }
 
     /**
      * Execute a long running operation. For example:
@@ -180,8 +182,10 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     ): LongRunningCall<RespT> {
         val operationsStub = GrpcClientStub(OperationsGrpc.newFutureStub(stub.channel), options)
         val future = Futures.transform(method(stub)) {
-            CallResult(it ?: throw IllegalStateException("Future returned null value"),
-                    options.responseMetadata)
+            CallResult(
+                it ?: throw IllegalStateException("Future returned null value"),
+                options.responseMetadata
+            )
         }
         return LongRunningCall(operationsStub, future, type)
     }
@@ -217,13 +221,16 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
         val responseStream = ResponseStreamImpl<RespT>()
         val requestObserver = method(stub)(object : StreamObserver<RespT> {
             override fun onNext(value: RespT) =
-                    responseStream.executor?.execute { responseStream.onNext(value) } ?: responseStream.onNext(value)
+                responseStream.executor?.execute { responseStream.onNext(value) }
+                    ?: responseStream.onNext(value)
 
             override fun onError(t: Throwable) =
-                    responseStream.executor?.execute { responseStream.onError(t) } ?: responseStream.onError(t)
+                responseStream.executor?.execute { responseStream.onError(t) }
+                    ?: responseStream.onError(t)
 
             override fun onCompleted() =
-                    responseStream.executor?.execute { responseStream.onCompleted() } ?: responseStream.onCompleted()
+                responseStream.executor?.execute { responseStream.onCompleted() }
+                    ?: responseStream.onCompleted()
         })
         val requestStream = object : RequestStream<ReqT> {
             override fun send(request: ReqT) = requestObserver.onNext(request)
@@ -313,13 +320,16 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
         val responseStream = ResponseStreamImpl<RespT>()
         method(stub, object : StreamObserver<RespT> {
             override fun onNext(value: RespT) =
-                    responseStream.executor?.execute { responseStream.onNext(value) } ?: responseStream.onNext(value)
+                responseStream.executor?.execute { responseStream.onNext(value) }
+                    ?: responseStream.onNext(value)
 
             override fun onError(t: Throwable) =
-                    responseStream.executor?.execute { responseStream.onError(t) } ?: responseStream.onError(t)
+                responseStream.executor?.execute { responseStream.onError(t) }
+                    ?: responseStream.onError(t)
 
             override fun onCompleted() =
-                    responseStream.executor?.execute { responseStream.onCompleted() } ?: responseStream.onCompleted()
+                responseStream.executor?.execute { responseStream.onCompleted() }
+                    ?: responseStream.onCompleted()
         })
 
         return ServerStreamingCall(responseStream)
@@ -347,11 +357,15 @@ class ClientCallOptions constructor(
 ) {
     internal val responseMetadata: ResponseMetadata = ResponseMetadata()
 
-    constructor(opts: ClientCallOptions) : this(opts.credentials, opts.requestMetadata,
-            opts.initialStreamRequests, opts.interceptors)
+    constructor(opts: ClientCallOptions) : this(
+        opts.credentials, opts.requestMetadata,
+        opts.initialStreamRequests, opts.interceptors
+    )
 
-    constructor(builder: Builder) : this(builder.credentials, builder.requestMetadata,
-            builder.initialStreamRequests, builder.interceptors)
+    constructor(builder: Builder) : this(
+        builder.credentials, builder.requestMetadata,
+        builder.initialStreamRequests, builder.interceptors
+    )
 
     @DecoratorMarker
     class Builder(
@@ -361,10 +375,12 @@ class ClientCallOptions constructor(
         internal val interceptors: MutableList<ClientInterceptor> = mutableListOf()
     ) {
 
-        constructor(opts: ClientCallOptions) : this(opts.credentials,
-                opts.requestMetadata.toMutableMap(),
-                opts.initialStreamRequests.toMutableList(),
-                opts.interceptors.toMutableList())
+        constructor(opts: ClientCallOptions) : this(
+            opts.credentials,
+            opts.requestMetadata.toMutableMap(),
+            opts.initialStreamRequests.toMutableList(),
+            opts.interceptors.toMutableList()
+        )
 
         /** Set service account credentials for authentication */
         fun withServiceAccountCredentials(
@@ -457,15 +473,19 @@ typealias FutureCall<T> = ListenableFuture<CallResult<T>>
 
 /** Add a [callback] that will be run on the provided [executor] when the CallResult is available */
 fun <T> FutureCall<T>.enqueue(executor: Executor, callback: (CallResult<T>) -> Unit) =
-        this.addListener(java.lang.Runnable {
-            callback(this.get() ?: throw IllegalStateException("get() returned an invalid (null) CallResult"))
-        }, executor)
+    this.addListener(java.lang.Runnable {
+        callback(
+            this.get() ?: throw IllegalStateException("get() returned an invalid (null) CallResult")
+        )
+    }, executor)
 
 private val DIRECT_EXECUTOR = MoreExecutors.directExecutor()
 
 /** Add a [callback] that will be run on the same thread as the caller */
 fun <T> FutureCall<T>.enqueue(callback: (CallResult<T>) -> Unit) = DIRECT_EXECUTOR.execute {
-    callback(this.get() ?: throw IllegalStateException("get() returned an invalid (null) CallResult"))
+    callback(
+        this.get() ?: throw IllegalStateException("get() returned an invalid (null) CallResult")
+    )
 }
 
 internal class ResponseStreamImpl<RespT>(

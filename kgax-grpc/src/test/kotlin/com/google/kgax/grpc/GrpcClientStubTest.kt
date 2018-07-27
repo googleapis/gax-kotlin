@@ -45,7 +45,7 @@ class GrpcClientStubTest {
         options.withMetadata("foo", listOf("one"))
 
         assertThat(options.requestMetadata).containsExactlyEntriesIn(
-                mapOf("foo" to listOf("one"), "bar" to listOf("1", "2"))
+            mapOf("foo" to listOf("one"), "bar" to listOf("1", "2"))
         )
     }
 
@@ -57,7 +57,7 @@ class GrpcClientStubTest {
         options.withoutMetadata("foo")
 
         assertThat(options.requestMetadata).containsExactlyEntriesIn(
-                mapOf("bar" to listOf("1", "2"))
+            mapOf("bar" to listOf("1", "2"))
         )
     }
 

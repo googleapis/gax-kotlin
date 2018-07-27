@@ -49,9 +49,11 @@ class LongRunningCall<T : MessageLite>(
         while (!operation!!.done) {
             try {
                 operation = stub.executeFuture {
-                    it.getOperation(GetOperationRequest.newBuilder()
+                    it.getOperation(
+                        GetOperationRequest.newBuilder()
                             .setName(operation!!.name)
-                            .build())
+                            .build()
+                    )
                 }.get().body
             } catch (e: InterruptedException) {
                 /** ignore and try again */
@@ -65,7 +67,8 @@ class LongRunningCall<T : MessageLite>(
     fun get() = asFuture().get()
 
     /** Add a [callback] that will be run on the provided [executor] when the CallResult is available */
-    fun enqueue(executor: Executor, callback: (CallResult<T>) -> Unit) = asFuture().enqueue(executor, callback)
+    fun enqueue(executor: Executor, callback: (CallResult<T>) -> Unit) =
+        asFuture().enqueue(executor, callback)
 
     /** Add a [callback] that will be run on the same thread as the caller */
     fun enqueue(callback: (CallResult<T>) -> Unit) = asFuture().enqueue(callback)
@@ -76,8 +79,10 @@ class LongRunningCall<T : MessageLite>(
     /** Parse the result of the [op] to the given [type] or throw an error */
     private fun <T : MessageLite> parseResult(op: Operation, type: Class<T>): T {
         if (op.error == null || op.error.code == Status.Code.OK.value()) {
-            return type.getMethod("parseFrom",
-                    ByteString::class.java).invoke(null, op.response.value) as T
+            return type.getMethod(
+                "parseFrom",
+                ByteString::class.java
+            ).invoke(null, op.response.value) as T
         }
 
         throw RuntimeException("Operation completed with error: ${op.error.code}\n details: ${op.error.message}")
@@ -86,6 +91,7 @@ class LongRunningCall<T : MessageLite>(
     companion object {
         /** The executor to use for resolving operations/ */
         var executor: ListeningExecutorService = MoreExecutors.listeningDecorator(
-                Executors.newCachedThreadPool())
+            Executors.newCachedThreadPool()
+        )
     }
 }

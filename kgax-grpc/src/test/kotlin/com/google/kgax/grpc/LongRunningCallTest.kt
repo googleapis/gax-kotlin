@@ -45,15 +45,19 @@ class LongRunningCallTest {
         }
         val grpcClient: GrpcClientStub<OperationsGrpc.OperationsFutureStub> = mock {
             on { executeFuture<Operation>(any()) }
-                    .thenReturn(future1)
-                    .thenReturn(futureDone)
+                .thenReturn(future1)
+                .thenReturn(futureDone)
         }
 
         val future = SettableFuture.create<CallResult<Operation>>()
-        future.set(CallResult(Operation.newBuilder()
-                .setName("test_op")
-                .setDone(false)
-                .build(), mock()))
+        future.set(
+            CallResult(
+                Operation.newBuilder()
+                    .setName("test_op")
+                    .setDone(false)
+                    .build(), mock()
+            )
+        )
         val lro = LongRunningCall(grpcClient, future, Operation::class.java)
         val result = lro.waitUntilDone()
 

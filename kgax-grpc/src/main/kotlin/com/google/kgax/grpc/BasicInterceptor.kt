@@ -54,39 +54,49 @@ open class BasicInterceptor(
         val doOnClose = onClose
 
         return object : ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
-                next.newCall(method, callOptions)) {
-            override fun start(responseListener: ClientCall.Listener<RespT>, headers: io.grpc.Metadata) {
+            next.newCall(method, callOptions)
+        ) {
+            override fun start(
+                responseListener: ClientCall.Listener<RespT>,
+                headers: io.grpc.Metadata
+            ) {
                 delegate().start(
-                        object : ForwardingClientCallListener.SimpleForwardingClientCallListener<RespT>(responseListener) {
-                            override fun onReady() {
-                                try {
-                                    doOnReady()
-                                } finally {
-                                    super.onReady()
-                                }
+                    object : ForwardingClientCallListener.SimpleForwardingClientCallListener<RespT>(
+                        responseListener
+                    ) {
+                        override fun onReady() {
+                            try {
+                                doOnReady()
+                            } finally {
+                                super.onReady()
                             }
-                            override fun onHeaders(headers: Metadata) {
-                                try {
-                                    doOnHeaders(headers)
-                                } finally {
-                                    super.onHeaders(headers)
-                                }
+                        }
+
+                        override fun onHeaders(headers: Metadata) {
+                            try {
+                                doOnHeaders(headers)
+                            } finally {
+                                super.onHeaders(headers)
                             }
-                            override fun onMessage(message: RespT) {
-                                try {
-                                    doOnMessage(message as Any)
-                                } finally {
-                                    super.onMessage(message)
-                                }
+                        }
+
+                        override fun onMessage(message: RespT) {
+                            try {
+                                doOnMessage(message as Any)
+                            } finally {
+                                super.onMessage(message)
                             }
-                            override fun onClose(status: Status, trailers: Metadata) {
-                                try {
-                                    doOnClose(status, trailers)
-                                } finally {
-                                    super.onClose(status, trailers)
-                                }
+                        }
+
+                        override fun onClose(status: Status, trailers: Metadata) {
+                            try {
+                                doOnClose(status, trailers)
+                            } finally {
+                                super.onClose(status, trailers)
                             }
-                        }, headers)
+                        }
+                    }, headers
+                )
             }
         }
     }

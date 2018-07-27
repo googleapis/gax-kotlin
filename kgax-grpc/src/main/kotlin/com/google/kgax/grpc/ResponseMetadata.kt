@@ -64,15 +64,20 @@ internal class ResponseMetadataInterceptor : ClientInterceptor {
         next: Channel
     ): ClientCall<ReqT, RespT> {
         return object : ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
-                next.newCall(method, callOptions)) {
-            override fun start(responseListener: ClientCall.Listener<RespT>, headers: io.grpc.Metadata) {
+            next.newCall(method, callOptions)
+        ) {
+            override fun start(
+                responseListener: ClientCall.Listener<RespT>,
+                headers: io.grpc.Metadata
+            ) {
                 delegate().start(
-                        object : SimpleForwardingClientCallListener<RespT>(responseListener) {
-                            override fun onHeaders(headers: Metadata?) {
-                                val opt = callOptions.getOption(ResponseMetadata.KEY)
-                                opt?.metadata = headers
-                            }
-                        }, headers)
+                    object : SimpleForwardingClientCallListener<RespT>(responseListener) {
+                        override fun onHeaders(headers: Metadata?) {
+                            val opt = callOptions.getOption(ResponseMetadata.KEY)
+                            opt?.metadata = headers
+                        }
+                    }, headers
+                )
             }
         }
     }
