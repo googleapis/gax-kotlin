@@ -56,7 +56,7 @@ class LongRunningCall<T : MessageLite>(
                     )
                 }.get().body
             } catch (e: InterruptedException) {
-                /** ignore and try again */
+                /* ignore and try again */
             }
         }
         // TODO: get actual metadata
@@ -67,11 +67,11 @@ class LongRunningCall<T : MessageLite>(
     fun get() = asFuture().get()
 
     /** Add a [callback] that will be run on the provided [executor] when the CallResult is available */
-    fun enqueue(executor: Executor, callback: (CallResult<T>) -> Unit) =
-        asFuture().enqueue(executor, callback)
+    fun on(executor: Executor, callback: Callback<T>.() -> Unit) =
+        asFuture().on(executor, callback)
 
     /** Add a [callback] that will be run on the same thread as the caller */
-    fun enqueue(callback: (CallResult<T>) -> Unit) = asFuture().enqueue(callback)
+    fun on(callback: Callback<T>.() -> Unit) = asFuture().on(callback)
 
     /** Get a future that will resolve when the operation has been completed. */
     fun asFuture(): FutureCall<T> = executor.submit(Callable<CallResult<T>> { waitUntilDone() })

@@ -18,6 +18,7 @@ package com.google.kgax.grpc
 
 import com.google.auth.oauth2.AccessToken
 import com.google.auth.oauth2.GoogleCredentials
+import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
@@ -471,22 +472,41 @@ data class ServerStreamingCall<RespT>(val responses: ResponseStream<RespT>)
 /** Result of a server call with the response as a [ListenableFuture]. */
 typealias FutureCall<T> = ListenableFuture<CallResult<T>>
 
+@DecoratorMarker
+class Callback<T> {
+    var success: (CallResult<T>) -> Unit = {}
+    var error: (Throwable) -> Unit = {}
+    var ignoreIf: (() -> Boolean)? = null
+    var ignoreResultIf: ((CallResult<T>) -> Boolean)? = null
+    var ignoreErrorIf: ((Throwable) -> Boolean)? = null
+}
+
 /** Add a [callback] that will be run on the provided [executor] when the CallResult is available */
-fun <T> FutureCall<T>.enqueue(executor: Executor, callback: (CallResult<T>) -> Unit) =
-    this.addListener(java.lang.Runnable {
-        callback(
-            this.get() ?: throw IllegalStateException("get() returned an invalid (null) CallResult")
-        )
+fun <T> FutureCall<T>.on(executor: Executor, callback: Callback<T>.() -> Unit) {
+    val cb = Callback<T>().apply(callback)
+    Futures.addCallback<CallResult<T>>(this, object : FutureCallback<CallResult<T>> {
+        override fun onSuccess(result: CallResult<T>?) {
+            val ignoreAll = cb.ignoreIf?.let { it() } ?: false
+            val ignore = cb.ignoreResultIf?.let { it(result!!) } ?: false
+            if (!ignoreAll && !ignore) {
+                cb.success(result!!)
+            }
+        }
+
+        override fun onFailure(t: Throwable?) {
+            val ignoreAll = cb.ignoreIf?.let { it() } ?: false
+            val ignore = cb.ignoreErrorIf?.let { it(t!!) } ?: false
+            if (!ignoreAll && !ignore) {
+                cb.error(t!!)
+            }
+        }
     }, executor)
+}
 
 private val DIRECT_EXECUTOR = MoreExecutors.directExecutor()
 
 /** Add a [callback] that will be run on the same thread as the caller */
-fun <T> FutureCall<T>.enqueue(callback: (CallResult<T>) -> Unit) = DIRECT_EXECUTOR.execute {
-    callback(
-        this.get() ?: throw IllegalStateException("get() returned an invalid (null) CallResult")
-    )
-}
+fun <T> FutureCall<T>.on(callback: Callback<T>.() -> Unit) = this.on(DIRECT_EXECUTOR, callback)
 
 internal class ResponseStreamImpl<RespT>(
     override var onNext: (RespT) -> Unit = {},
