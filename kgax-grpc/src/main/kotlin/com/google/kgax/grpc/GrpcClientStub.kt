@@ -21,7 +21,6 @@ import com.google.auth.oauth2.GoogleCredentials
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import com.google.kgax.Page
 import com.google.longrunning.Operation
@@ -34,9 +33,7 @@ import io.grpc.stub.AbstractStub
 import io.grpc.stub.MetadataUtils
 import io.grpc.stub.StreamObserver
 import java.io.InputStream
-import java.util.concurrent.Callable
 import java.util.concurrent.Executor
-import java.util.concurrent.Executors
 
 @DslMarker
 annotation class DecoratorMarker
