@@ -34,7 +34,9 @@ import io.grpc.stub.AbstractStub
 import io.grpc.stub.MetadataUtils
 import io.grpc.stub.StreamObserver
 import java.io.InputStream
+import java.util.concurrent.Callable
 import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 
 @DslMarker
 annotation class DecoratorMarker
@@ -483,11 +485,13 @@ class Callback<T> {
 
 /** Add a [callback] that will be run on the provided [executor] when the CallResult is available */
 fun <T> FutureCall<T>.on(executor: Executor, callback: Callback<T>.() -> Unit) {
-    val cb = Callback<T>().apply(callback)
     Futures.addCallback<CallResult<T>>(this, object : FutureCallback<CallResult<T>> {
+        val cb = Callback<T>().apply(callback)
+
         override fun onSuccess(result: CallResult<T>?) {
             val ignoreAll = cb.ignoreIf?.let { it() } ?: false
             val ignore = cb.ignoreResultIf?.let { it(result!!) } ?: false
+
             if (!ignoreAll && !ignore) {
                 cb.success(result!!)
             }
@@ -496,17 +500,13 @@ fun <T> FutureCall<T>.on(executor: Executor, callback: Callback<T>.() -> Unit) {
         override fun onFailure(t: Throwable?) {
             val ignoreAll = cb.ignoreIf?.let { it() } ?: false
             val ignore = cb.ignoreErrorIf?.let { it(t!!) } ?: false
+
             if (!ignoreAll && !ignore) {
                 cb.error(t!!)
             }
         }
     }, executor)
 }
-
-private val DIRECT_EXECUTOR = MoreExecutors.directExecutor()
-
-/** Add a [callback] that will be run on the same thread as the caller */
-fun <T> FutureCall<T>.on(callback: Callback<T>.() -> Unit) = this.on(DIRECT_EXECUTOR, callback)
 
 internal class ResponseStreamImpl<RespT>(
     override var onNext: (RespT) -> Unit = {},

@@ -70,9 +70,6 @@ class LongRunningCall<T : MessageLite>(
     fun on(executor: Executor, callback: Callback<T>.() -> Unit) =
         asFuture().on(executor, callback)
 
-    /** Add a [callback] that will be run on the same thread as the caller */
-    fun on(callback: Callback<T>.() -> Unit) = asFuture().on(callback)
-
     /** Get a future that will resolve when the operation has been completed. */
     fun asFuture(): FutureCall<T> = executor.submit(Callable<CallResult<T>> { waitUntilDone() })
 
