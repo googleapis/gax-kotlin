@@ -9,7 +9,7 @@ steps:
   args: ['bash', '-c', 'touch app/src/main/res/raw/sa.json']
   dir: 'kgax-grpc-examples'
 - id: build_examples
-  name: 'gcr.io/lofty-totality-214401/example-builder'
+  name: 'gcr.io/kotlin-gapic/example-builder'
   args: []
   dir: 'kgax-grpc-examples'
 
