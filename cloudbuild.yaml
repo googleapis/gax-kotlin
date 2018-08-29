@@ -1,3 +1,21 @@
 steps:
+# build library and run checks
 - name: 'gcr.io/cloud-builders/gradle'
   args: ['build']
+
+# build examples
+- id: example_key
+  name: 'ubuntu'
+  args: ['bash', '-c', 'touch app/src/main/res/raw/sa.json']
+  dir: 'kgax-grpc-examples'
+- id: build_examples
+  name: 'gcr.io/lofty-totality-214401/example-builder'
+  args: []
+  dir: 'kgax-grpc-examples'
+
+# TODO
+# run example tests
+# - id: examples_tester
+#   name: 'gcr.io/cloud-builders/gcloud'
+#   args: ["firebase", "test", "android", "run", "--app", "app/build/outputs/apk/debug/app-debug.apk", "--test", "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"]
+#   dir: 'kgax-grpc-examples'
