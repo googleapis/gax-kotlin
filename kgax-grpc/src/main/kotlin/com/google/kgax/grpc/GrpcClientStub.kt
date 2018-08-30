@@ -234,6 +234,7 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
         })
         val requestStream = object : RequestStream<ReqT> {
             override fun send(request: ReqT) = requestObserver.onNext(request)
+            override fun end() = requestObserver.onCompleted()
         }
 
         // add and initial requests
@@ -281,6 +282,7 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
         })
         val requestStream = object : RequestStream<ReqT> {
             override fun send(request: ReqT) = requestObserver.onNext(request)
+            override fun end() = requestObserver.onCompleted()
         }
 
         // add and initial requests
@@ -441,7 +443,20 @@ data class PageResult<T>(
 
 /** A stream of requests to the server. */
 interface RequestStream<ReqT> {
+    /**
+     * Send the next request to the server.
+     *
+     * Cannot be called after [end].
+     */
     fun send(request: ReqT)
+
+    /**
+     * Stop sending requests to the server.
+     *
+     * APIs may not require that [end] is explicitly called, but [send] cannot be
+     * invoked after this method is called.
+     */
+    fun end()
 }
 
 /** A stream of responses from the server. */
