@@ -218,7 +218,11 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): StreamingCall<ReqT, RespT> {
-        val responseStream = ResponseStreamImpl<RespT>()
+        val responseStream = object : ResponseStreamImpl<RespT>() {
+            override fun close() {
+                TODO("not implemented")
+            }
+        }
         val requestObserver = method(stub)(object : StreamObserver<RespT> {
             override fun onNext(value: RespT) =
                 responseStream.executor?.execute { responseStream.onNext(value) }
@@ -234,13 +238,14 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
         })
         val requestStream = object : RequestStream<ReqT> {
             override fun send(request: ReqT) = requestObserver.onNext(request)
-            override fun end() = requestObserver.onCompleted()
+            override fun close() = requestObserver.onCompleted()
         }
 
         // add and initial requests
-        options.initialStreamRequests.map {
-            (it as? ReqT) ?: throw IllegalArgumentException("early request data is an invalid type")
-        }.forEach { requestStream.send(it) }
+        for (request in options.initialStreamRequests) {
+            @Suppress("UNCHECKED_CAST")
+            requestStream.send(request as ReqT)
+        }
 
         return StreamingCall(requestStream, responseStream)
     }
@@ -282,7 +287,7 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
         })
         val requestStream = object : RequestStream<ReqT> {
             override fun send(request: ReqT) = requestObserver.onNext(request)
-            override fun end() = requestObserver.onCompleted()
+            override fun close() = requestObserver.onCompleted()
         }
 
         // add and initial requests
@@ -319,7 +324,11 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     fun <RespT : MessageLite> executeServerStreaming(
         method: (T, StreamObserver<RespT>) -> Unit
     ): ServerStreamingCall<RespT> {
-        val responseStream = ResponseStreamImpl<RespT>()
+        val responseStream = object : ResponseStreamImpl<RespT>() {
+            override fun close() {
+                TODO("not implemented")
+            }
+        }
         method(stub, object : StreamObserver<RespT> {
             override fun onNext(value: RespT) =
                 responseStream.executor?.execute { responseStream.onNext(value) }
@@ -442,31 +451,31 @@ data class PageResult<T>(
 ) : Page<T>
 
 /** A stream of requests to the server. */
-interface RequestStream<ReqT> {
+interface RequestStream<ReqT> : AutoCloseable {
     /**
      * Send the next request to the server.
      *
      * Cannot be called after [end].
      */
     fun send(request: ReqT)
-
-    /**
-     * Stop sending requests to the server.
-     *
-     * APIs may not require that [end] is explicitly called, but [send] cannot be
-     * invoked after this method is called.
-     */
-    fun end()
 }
 
 /** A stream of responses from the server. */
-interface ResponseStream<RespT> {
+interface ResponseStream<RespT> : AutoCloseable {
     var onNext: (RespT) -> Unit
     var onError: (Throwable) -> Unit
     var onCompleted: () -> Unit
 
     var executor: Executor?
 }
+
+/** [ResponseStream] with defaults */
+internal abstract class ResponseStreamImpl<RespT>(
+    override var onNext: (RespT) -> Unit = {},
+    override var onError: (Throwable) -> Unit = {},
+    override var onCompleted: () -> Unit = {},
+    override var executor: Executor? = null
+) : ResponseStream<RespT>
 
 /** Result of a bi-directional streaming call including [requests] and [responses] streams. */
 data class StreamingCall<ReqT, RespT>(
@@ -520,11 +529,5 @@ fun <T> FutureCall<T>.on(executor: Executor, callback: Callback<T>.() -> Unit) {
     }, executor)
 }
 
-internal class ResponseStreamImpl<RespT>(
-    override var onNext: (RespT) -> Unit = {},
-    override var onError: (Throwable) -> Unit = {},
-    override var onCompleted: () -> Unit = {},
-    override var executor: Executor? = null
-) : ResponseStream<RespT>
-
+/** Get the result of the future */
 inline fun <T> ListenableFuture<T>.get(handler: (T) -> Unit) = handler(this.get())
