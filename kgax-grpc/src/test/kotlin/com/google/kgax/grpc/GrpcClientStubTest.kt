@@ -90,7 +90,6 @@ class GrpcClientStubTest {
     @Test
     fun `Can do a streaming call`() {
         val stub: TestStub = createTestStubMock()
-
         val inStream: StreamObserver<Int32Value> = mock()
         val exception: RuntimeException = mock()
 
@@ -110,9 +109,12 @@ class GrpcClientStubTest {
         val responses = mutableListOf<String>()
         val exceptions = mutableListOf<Throwable>()
         var complete = false
+
         result.responses.onNext = { responses.add(it.value) }
         result.responses.onError = { exceptions.add(it) }
         result.responses.onCompleted = { complete = true }
+        result.start()
+
         result.requests.send(Int32Value(1))
         result.requests.send(Int32Value(2))
 
@@ -127,6 +129,25 @@ class GrpcClientStubTest {
         assertThat(responses).containsExactly("one", "two")
         assertThat(exceptions).containsExactly(exception)
         assertThat(complete).isTrue()
+    }
+
+    @Test(expected = kotlin.UninitializedPropertyAccessException::class)
+    fun `Throws when a streaming call is not started`() {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            return inStream
+        }
+
+        val result = call.executeStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            ::method
+        }
+
+        result.requests.send(Int32Value(1))
     }
 
     @Test
@@ -148,6 +169,7 @@ class GrpcClientStubTest {
                 ::method
             }
 
+            result.start()
             result.requests.send(Int32Value.newBuilder().setValue(10).build())
             result.requests.send(Int32Value.newBuilder().setValue(20).build())
 
@@ -169,6 +191,28 @@ class GrpcClientStubTest {
         }
     }
 
+    @Test(expected = kotlin.UninitializedPropertyAccessException::class)
+    fun `Throws when a client streaming call is not started`() {
+        listOf(null, RuntimeException("failed")).forEach { ex ->
+            val stub: TestStub = createTestStubMock()
+            val inStream: StreamObserver<Int32Value> = mock()
+
+            // capture output stream
+            val call = GrpcClientStub(stub, ClientCallOptions())
+            fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+                return inStream
+            }
+
+            val result = call.executeClientStreaming { arg ->
+                assertThat(arg).isEqualTo(stub)
+                ::method
+            }
+
+            result.requests.send(Int32Value.newBuilder().setValue(10).build())
+            result.requests.send(Int32Value.newBuilder().setValue(20).build())
+        }
+    }
+
     @Test
     fun `Can do a server streaming call`() {
         val stub: TestStub = createTestStubMock()
@@ -185,9 +229,12 @@ class GrpcClientStubTest {
         val responses = mutableListOf<String>()
         val exceptions = mutableListOf<Throwable>()
         var complete = false
-        result.responses.onNext = { responses.add(it.value) }
-        result.responses.onError = { exceptions.add(it) }
-        result.responses.onCompleted = { complete = true }
+
+        result.start {
+            onNext = { responses.add(it.value) }
+            onError = { exceptions.add(it) }
+            onCompleted = { complete = true }
+        }
 
         // fake output from server
         outStream?.onNext(StringValue("one"))
@@ -198,6 +245,39 @@ class GrpcClientStubTest {
         assertThat(responses).containsExactly("one", "two")
         assertThat(exceptions).containsExactly(exception)
         assertThat(complete).isTrue()
+    }
+
+    @Test
+    fun `Has no responses when a server streaming call is not started`() {
+        val stub: TestStub = createTestStubMock()
+        val exception: RuntimeException = mock()
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        var outStream: StreamObserver<StringValue>? = null
+        val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
+            assertThat(it).isEqualTo(stub)
+            outStream = observer
+        }
+
+        val responses = mutableListOf<String>()
+        val exceptions = mutableListOf<Throwable>()
+        var complete = false
+
+        // forget to call start
+        result.responses.onNext = { responses.add(it.value) }
+        result.responses.onError = { exceptions.add(it) }
+        result.responses.onCompleted = { complete = true }
+
+        // fake output from server
+        outStream?.onNext(StringValue("one"))
+        outStream?.onNext(StringValue("two"))
+        outStream?.onError(exception)
+        outStream?.onCompleted()
+
+        assertThat(responses).isEmpty()
+        assertThat(exceptions).isEmpty()
+        assertThat(complete).isFalse()
     }
 
     private fun createTestStubMock(): TestStub {

@@ -557,7 +557,6 @@ internal class ClientStreamingCallImpl<ReqT, RespT>(
     override fun start() {
         requests = start(responseFuture)
     }
-
 }
 
 internal class ServerStreamingCallImpl<RespT>(
