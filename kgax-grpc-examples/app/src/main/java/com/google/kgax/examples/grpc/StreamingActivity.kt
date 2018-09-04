@@ -95,9 +95,11 @@ class StreamingActivity : AppCompatActivity() {
             }
 
             // handle incoming responses
-            stream.responses.onNext = { resultText.text = it.toString() }
-            stream.responses.onError = { Log.e(TAG, "uh oh", it) }
-            stream.responses.onCompleted = { Log.i(TAG, "All done!") }
+            stream.start {
+                onNext = { resultText.text = it.toString() }
+                onError = { Log.e(TAG, "uh oh", it) }
+                onCompleted = { Log.i(TAG, "All done!") }
+            }
         } else {
             Log.e(TAG, "No permission to record! Please allow and then relaunch the app!")
         }

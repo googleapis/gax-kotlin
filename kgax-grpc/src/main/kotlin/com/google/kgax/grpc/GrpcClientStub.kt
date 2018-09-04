@@ -218,36 +218,44 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): StreamingCall<ReqT, RespT> {
+        // starts the call
+        val doStart = { responseStream: ResponseStreamImpl<RespT> ->
+            // handle requests
+            val requestObserver = method(stub)(object : StreamObserver<RespT> {
+                override fun onNext(value: RespT) =
+                    responseStream.executor?.execute { responseStream.onNext(value) }
+                        ?: responseStream.onNext(value)
+
+                override fun onError(t: Throwable) =
+                    responseStream.executor?.execute { responseStream.onError(t) }
+                        ?: responseStream.onError(t)
+
+                override fun onCompleted() =
+                    responseStream.executor?.execute { responseStream.onCompleted() }
+                        ?: responseStream.onCompleted()
+            })
+            val requestStream: RequestStream<ReqT> = object : RequestStream<ReqT> {
+                override fun send(request: ReqT) = requestObserver.onNext(request)
+                override fun close() = requestObserver.onCompleted()
+            }
+
+            // add and initial requests
+            for (request in options.initialStreamRequests) {
+                @Suppress("UNCHECKED_CAST")
+                requestStream.send(request as ReqT)
+            }
+
+            requestStream
+        }
+
+        // handle responses
         val responseStream = object : ResponseStreamImpl<RespT>() {
             override fun close() {
                 TODO("not implemented")
             }
         }
-        val requestObserver = method(stub)(object : StreamObserver<RespT> {
-            override fun onNext(value: RespT) =
-                responseStream.executor?.execute { responseStream.onNext(value) }
-                    ?: responseStream.onNext(value)
 
-            override fun onError(t: Throwable) =
-                responseStream.executor?.execute { responseStream.onError(t) }
-                    ?: responseStream.onError(t)
-
-            override fun onCompleted() =
-                responseStream.executor?.execute { responseStream.onCompleted() }
-                    ?: responseStream.onCompleted()
-        })
-        val requestStream = object : RequestStream<ReqT> {
-            override fun send(request: ReqT) = requestObserver.onNext(request)
-            override fun close() = requestObserver.onCompleted()
-        }
-
-        // add and initial requests
-        for (request in options.initialStreamRequests) {
-            @Suppress("UNCHECKED_CAST")
-            requestStream.send(request as ReqT)
-        }
-
-        return StreamingCall(requestStream, responseStream)
+        return StreamingCallImpl(doStart, responseStream)
     }
 
     /**
@@ -273,29 +281,34 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     fun <ReqT : MessageLite, RespT : MessageLite> executeClientStreaming(
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): ClientStreamingCall<ReqT, RespT> {
-        val responseFuture = SettableFuture.create<RespT>()
-        val requestObserver = method(stub)(object : StreamObserver<RespT> {
-            override fun onNext(value: RespT) {
-                responseFuture.set(value)
+        // starts the call
+        val doStart = { responseFuture: SettableFuture<RespT> ->
+            val requestObserver = method(stub)(object : StreamObserver<RespT> {
+                override fun onNext(value: RespT) {
+                    responseFuture.set(value)
+                }
+
+                override fun onError(t: Throwable) {
+                    responseFuture.setException(t)
+                }
+
+                override fun onCompleted() = Unit
+            })
+            val requestStream = object : RequestStream<ReqT> {
+                override fun send(request: ReqT) = requestObserver.onNext(request)
+                override fun close() = requestObserver.onCompleted()
             }
 
-            override fun onError(t: Throwable) {
-                responseFuture.setException(t)
+            // add and initial requests
+            for (request in options.initialStreamRequests) {
+                @Suppress("UNCHECKED_CAST")
+                requestStream.send(request as ReqT)
             }
 
-            override fun onCompleted() = Unit
-        })
-        val requestStream = object : RequestStream<ReqT> {
-            override fun send(request: ReqT) = requestObserver.onNext(request)
-            override fun close() = requestObserver.onCompleted()
+            requestStream
         }
 
-        // add and initial requests
-        options.initialStreamRequests.map {
-            (it as? ReqT) ?: throw IllegalArgumentException("early request data is an invalid type")
-        }.forEach { requestStream.send(it) }
-
-        return ClientStreamingCall(requestStream, responseFuture)
+        return ClientStreamingCallImpl(doStart, SettableFuture.create<RespT>())
     }
 
     /**
@@ -324,26 +337,30 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     fun <RespT : MessageLite> executeServerStreaming(
         method: (T, StreamObserver<RespT>) -> Unit
     ): ServerStreamingCall<RespT> {
+        // starts the call
+        val doStart = { responseStream: ResponseStreamImpl<RespT> ->
+            method(stub, object : StreamObserver<RespT> {
+                override fun onNext(value: RespT) =
+                    responseStream.executor?.execute { responseStream.onNext(value) }
+                        ?: responseStream.onNext(value)
+
+                override fun onError(t: Throwable) =
+                    responseStream.executor?.execute { responseStream.onError(t) }
+                        ?: responseStream.onError(t)
+
+                override fun onCompleted() =
+                    responseStream.executor?.execute { responseStream.onCompleted() }
+                        ?: responseStream.onCompleted()
+            })
+        }
+
         val responseStream = object : ResponseStreamImpl<RespT>() {
             override fun close() {
                 TODO("not implemented")
             }
         }
-        method(stub, object : StreamObserver<RespT> {
-            override fun onNext(value: RespT) =
-                responseStream.executor?.execute { responseStream.onNext(value) }
-                    ?: responseStream.onNext(value)
 
-            override fun onError(t: Throwable) =
-                responseStream.executor?.execute { responseStream.onError(t) }
-                    ?: responseStream.onError(t)
-
-            override fun onCompleted() =
-                responseStream.executor?.execute { responseStream.onCompleted() }
-                    ?: responseStream.onCompleted()
-        })
-
-        return ServerStreamingCall(responseStream)
+        return ServerStreamingCallImpl(doStart, responseStream)
     }
 }
 
@@ -455,7 +472,7 @@ interface RequestStream<ReqT> : AutoCloseable {
     /**
      * Send the next request to the server.
      *
-     * Cannot be called after [end].
+     * Cannot be called after [close].
      */
     fun send(request: ReqT)
 }
@@ -477,20 +494,84 @@ internal abstract class ResponseStreamImpl<RespT>(
     override var executor: Executor? = null
 ) : ResponseStream<RespT>
 
-/** Result of a bi-directional streaming call including [requests] and [responses] streams. */
-data class StreamingCall<ReqT, RespT>(
-    val requests: RequestStream<ReqT>,
+/**
+ * Result of a bi-directional streaming call including [requests] and [responses] streams.
+ *
+ * The [start] method must be called before accessing [requests] or [responses] and
+ * should be called only once.
+ */
+interface StreamingCall<ReqT, RespT> {
+    val requests: RequestStream<ReqT>
     val responses: ResponseStream<RespT>
-)
 
-/** Result of a client streaming call including the [requests] stream and a [response]. */
-data class ClientStreamingCall<ReqT, RespT>(
-    val requests: RequestStream<ReqT>,
+    fun start(init: (ResponseStream<RespT>.() -> Unit)? = null)
+}
+
+/**
+ * Result of a client streaming call including the [requests] stream and a [response].
+ *
+ * The [start] method must be called before accessing [requests] or [response] and
+ * should be called only once.
+ */
+interface ClientStreamingCall<ReqT, RespT> {
+    val requests: RequestStream<ReqT>
     val response: ListenableFuture<RespT>
-)
 
-/** Result of a server streaming call including the stream of [responses]. */
-data class ServerStreamingCall<RespT>(val responses: ResponseStream<RespT>)
+    fun start()
+}
+
+/**
+ * Result of a server streaming call including the stream of [responses].
+ *
+ * The [start] method must be called before accessing [responses] and
+ * should be called only once.
+ */
+interface ServerStreamingCall<RespT> {
+    val responses: ResponseStream<RespT>
+
+    fun start(init: (ResponseStream<RespT>.() -> Unit)?)
+}
+
+internal class StreamingCallImpl<ReqT, RespT> (
+    private val start: (ResponseStreamImpl<RespT>) -> RequestStream<ReqT>,
+    private val responseStream: ResponseStreamImpl<RespT>
+) : StreamingCall<ReqT, RespT> {
+
+    override lateinit var requests: RequestStream<ReqT>
+    override var responses: ResponseStream<RespT> = responseStream
+
+    override fun start(init: (ResponseStream<RespT>.() -> Unit)?) {
+        init?.let { responses.apply(it) }
+        requests = start(responseStream)
+    }
+}
+
+internal class ClientStreamingCallImpl<ReqT, RespT>(
+    private val start: (SettableFuture<RespT>) -> RequestStream<ReqT>,
+    private val responseFuture: SettableFuture<RespT>
+) : ClientStreamingCall<ReqT, RespT> {
+
+    override lateinit var requests: RequestStream<ReqT>
+    override var response: ListenableFuture<RespT> = responseFuture
+
+    override fun start() {
+        requests = start(responseFuture)
+    }
+
+}
+
+internal class ServerStreamingCallImpl<RespT>(
+    private val start: (ResponseStreamImpl<RespT>) -> Unit,
+    private val responseStream: ResponseStreamImpl<RespT>
+) : ServerStreamingCall<RespT> {
+
+    override var responses: ResponseStream<RespT> = responseStream
+
+    override fun start(init: (ResponseStream<RespT>.() -> Unit)?) {
+        init?.let { responses.apply(it) }
+        start(responseStream)
+    }
+}
 
 /** Result of a server call with the response as a [ListenableFuture]. */
 typealias FutureCall<T> = ListenableFuture<CallResult<T>>
