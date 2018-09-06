@@ -1,0 +1,42 @@
+# Java Gradle CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-java/ for more details
+#
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/openjdk:8-jdk
+    working_directory: ~/gax-kotlin
+    steps:
+      - checkout
+
+      # download and cache dependencies
+      - restore_cache:
+          keys:
+          - gax-kotlin-dependencies-{{ checksum "build.gradle" }}
+      - run: gradle dependencies
+      - save_cache:
+          paths:
+            - ~/.gradle
+          key: v1-dependencies-{{ checksum "build.gradle" }}
+        
+      # build and test
+      - run: gradle build
+      - run: 
+          name: Save test results
+          command: |
+            mkdir -p ~/junit/
+            find . -type f -regex ".*/build/test-results/.*xml" -exec cp {} ~/junit/ \;
+          when: always
+      - store_test_results:
+          path: ~/junit
+      - store_artifacts:
+          path: ~/junit  
+      
+      # coverage
+      - run: 
+          name: Codecov
+          command: bash <(curl -s https://codecov.io/bash)
+          when: always
+          
