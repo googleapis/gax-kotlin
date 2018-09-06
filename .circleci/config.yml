@@ -35,7 +35,7 @@ jobs:
           when: always
 
   build_examples:
-    working_directory: ~/gax-kotlin/kgax-grcp-examples
+    working_directory: ~/gax-kotlin/kgax-grpc-examples
     docker:
       - image: circleci/android:api-27-alpha
     environment:
