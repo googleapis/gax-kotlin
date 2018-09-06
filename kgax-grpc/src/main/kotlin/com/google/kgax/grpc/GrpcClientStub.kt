@@ -65,7 +65,7 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
             .withOption(ResponseMetadata.KEY, options.responseMetadata)
 
         // add request metadata
-        if (!options.requestMetadata.isEmpty()) {
+        if (options.requestMetadata.isNotEmpty()) {
             val header = io.grpc.Metadata()
             for ((k, v) in options.requestMetadata) {
                 val key = io.grpc.Metadata.Key.of(k, io.grpc.Metadata.ASCII_STRING_MARSHALLER)
@@ -455,6 +455,12 @@ class ClientCallOptions constructor(
 
         fun build() = ClientCallOptions(this)
     }
+}
+
+fun clientCallOptions(init: ClientCallOptions.Builder.() -> Unit = {}): ClientCallOptions {
+    val builder = ClientCallOptions.Builder()
+    builder.apply(init)
+    return builder.build()
 }
 
 /** Result of the call with the response [body] associated [metadata]. */

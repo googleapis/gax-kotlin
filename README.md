@@ -3,6 +3,7 @@
 Google API extensions for Kotlin.
 
 [![CircleCI](https://circleci.com/gh/googleapis/gax-kotlin/tree/master.svg?style=svg)](https://circleci.com/gh/googleapis/gax-kotlin/tree/master)
+[![codecov](https://codecov.io/gh/googleapis/gax-kotlin/branch/master/graph/badge.svg)](https://codecov.io/gh/googleapis/gax-kotlin)
 
 KGax is a small set of utility libraries for interacting with generated [gRPC](https://grpc.io/) Java stubs in Kotlin.  
 It may be used directly to make interacting with the gRPC stubs easier in Kotlin, or it can be combined with 

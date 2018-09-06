@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import com.google.longrunning.Operation
 import com.google.longrunning.OperationsGrpc
+import com.google.protobuf.StringValue
 import com.nhaarman.mockito_kotlin.any
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.times
@@ -64,5 +65,22 @@ class LongRunningCallTest {
         assertThat(result.body).isInstanceOf(Operation::class.java)
 
         verify(grpcClient, times(2)).executeFuture<Operation>(any())
+    }
+
+    @Test
+    fun `behaves as a future`() {
+        val operationFuture = SettableFuture.create<CallResult<Operation>>()
+        val operation = Operation.newBuilder().setDone(true).build()
+        operationFuture.set(CallResult(operation, ResponseMetadata()))
+        val grpcClient: GrpcClientStub<OperationsGrpc.OperationsFutureStub> = mock {
+            on { executeFuture<Operation>(any()) }
+                .thenReturn(operationFuture)
+        }
+
+        val lro = LongRunningCall(grpcClient, operationFuture, StringValue::class.java)
+        lro.get()
+
+        assertThat(lro.isDone).isTrue()
+        assertThat(lro.operation).isEqualTo(operation)
     }
 }
