@@ -21,6 +21,7 @@ steps:
 #   dir: 'kgax-grpc-examples'
 
 - name: 'gcr.io/cloud-builders/curl'
-  args: ['-s', 'https://codecov.io/bash']
+  entrypoint: 'bash'
+  args: ['<(curl -s https://codecov.io/bash)']
   env:
   - 'CODECOV_TOKEN=_CODECOV'
