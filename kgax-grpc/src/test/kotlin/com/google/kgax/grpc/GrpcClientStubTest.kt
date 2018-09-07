@@ -24,13 +24,17 @@ import com.google.protobuf.Int32Value
 import com.google.protobuf.StringValue
 import com.nhaarman.mockito_kotlin.any
 import com.nhaarman.mockito_kotlin.mock
+import com.nhaarman.mockito_kotlin.never
 import com.nhaarman.mockito_kotlin.times
 import com.nhaarman.mockito_kotlin.verify
 import com.nhaarman.mockito_kotlin.whenever
 import io.grpc.CallOptions
 import io.grpc.Channel
+import io.grpc.ClientInterceptor
 import io.grpc.stub.AbstractStub
 import io.grpc.stub.StreamObserver
+import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.util.concurrent.ExecutionException
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -63,6 +67,68 @@ class GrpcClientStubTest {
         assertThat(options.requestMetadata).containsExactlyEntriesIn(
             mapOf("bar" to listOf("1", "2"))
         )
+    }
+
+    @Test
+    fun `ClientCallOptions can be built from an existing option`() {
+        val interceptor1: ClientInterceptor = mock()
+        val interceptor2: ClientInterceptor = mock()
+
+        val opts = clientCallOptions {
+            withAccessToken(mock(), listOf("scope"))
+            withInterceptor(interceptor1)
+            withInterceptor(interceptor2)
+            withInitialRequest(StringValue("!"))
+            withMetadata("a", listOf("aa", "aaa"))
+            withMetadata("b", listOf("bb"))
+        }
+
+        val newOpts = ClientCallOptions.Builder(opts).build()
+
+        assertThat(opts).isNotEqualTo(newOpts)
+        assertThat(newOpts.interceptors).containsExactly(interceptor1, interceptor2)
+        assertThat(newOpts.initialStreamRequests).containsExactly(StringValue("!"))
+        assertThat(newOpts.credentials).isNotNull()
+        assertThat(newOpts.requestMetadata.keys).containsExactly("a", "b")
+    }
+
+    @Test
+    fun `ClientCallOptions can drop metadata`() {
+        val opts = clientCallOptions {
+            withAccessToken(mock())
+            withMetadata("a", listOf("aa", "aaa"))
+            withMetadata("b", listOf("bb"))
+            withMetadata("c", listOf("go away"))
+            withoutMetadata("c")
+            withoutMetadata("a")
+        }
+
+        val newOpts = ClientCallOptions.Builder(opts).build()
+
+        assertThat(opts).isNotEqualTo(newOpts)
+        assertThat(newOpts.interceptors).isEmpty()
+        assertThat(newOpts.initialStreamRequests).isEmpty()
+        assertThat(newOpts.credentials).isNotNull()
+        assertThat(newOpts.requestMetadata.keys).containsExactly("b")
+        assertThat(newOpts.requestMetadata.get("b")).containsExactly("bb")
+    }
+
+    @Test(expected = IOException::class)
+    fun `ClientCallOptions can use credentials`() {
+        val opts = clientCallOptions {
+            ByteArrayInputStream("{}".toByteArray()).use {
+                withServiceAccountCredentials(it)
+            }
+        }
+    }
+
+    @Test(expected = IOException::class)
+    fun `ClientCallOptions can use scoped credentials`() {
+        val opts = clientCallOptions {
+            ByteArrayInputStream("{}".toByteArray()).use {
+                withServiceAccountCredentials(it, listOf("scope"))
+            }
+        }
     }
 
     @Test
@@ -164,9 +230,36 @@ class GrpcClientStubTest {
 
         verify(inStream).onNext(Int32Value(1))
         verify(inStream).onNext(Int32Value(2))
+        verify(inStream, never()).onCompleted()
         assertThat(responses).containsExactly("one", "two")
         assertThat(exceptions).containsExactly(exception)
         assertThat(complete).isTrue()
+    }
+
+    @Test
+    fun `Can close a streaming call request stream`() {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            return inStream
+        }
+
+        val result = call.executeStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            ::method
+        }
+        result.start()
+
+        result.requests.send(Int32Value(5))
+        result.requests.send(Int32Value(55))
+        result.requests.close()
+
+        verify(inStream).onNext(Int32Value(5))
+        verify(inStream).onNext(Int32Value(55))
+        verify(inStream).onCompleted()
     }
 
     @Test(expected = kotlin.UninitializedPropertyAccessException::class)
@@ -208,8 +301,8 @@ class GrpcClientStubTest {
             }
 
             result.start()
-            result.requests.send(Int32Value.newBuilder().setValue(10).build())
-            result.requests.send(Int32Value.newBuilder().setValue(20).build())
+            result.requests.send(Int32Value(10))
+            result.requests.send(Int32Value(20))
 
             // fake output from server
             if (ex != null) {
@@ -227,6 +320,32 @@ class GrpcClientStubTest {
                 assertThat(result.response.get().value).isEqualTo("abc")
             }
         }
+    }
+
+    @Test
+    fun `Can close a client call request stream`() {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            return inStream
+        }
+
+        val result = call.executeClientStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            ::method
+        }
+        result.start()
+
+        result.requests.send(Int32Value(5))
+        result.requests.send(Int32Value(55))
+        result.requests.close()
+
+        verify(inStream).onNext(Int32Value(5))
+        verify(inStream).onNext(Int32Value(55))
+        verify(inStream).onCompleted()
     }
 
     @Test(expected = kotlin.UninitializedPropertyAccessException::class)
