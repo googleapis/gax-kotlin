@@ -17,38 +17,53 @@
 package com.google.kgax.grpc
 
 import com.google.common.truth.Truth.assertThat
-import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import com.google.longrunning.Operation
 import com.google.longrunning.OperationsGrpc
+import com.google.protobuf.Any
 import com.google.protobuf.StringValue
 import com.nhaarman.mockito_kotlin.any
+import com.nhaarman.mockito_kotlin.doReturn
 import com.nhaarman.mockito_kotlin.mock
-import com.nhaarman.mockito_kotlin.times
-import com.nhaarman.mockito_kotlin.verify
+import com.nhaarman.mockito_kotlin.whenever
+import io.grpc.CallOptions
 import kotlin.test.Test
 
 class LongRunningCallTest {
 
     @Test
     fun `LRO waits until done`() {
-        val result1: CallResult<Operation> = mock {
-            on { body }.thenReturn(Operation.newBuilder().setName("a").setDone(false).build())
+        val lroResponse = StringValue.newBuilder().setValue("long time").build()
+
+        val future1 = SettableFuture.create<Operation>()
+        future1.set(
+            Operation.newBuilder()
+                .setName("a")
+                .setDone(false)
+                .build()
+        )
+        val futureDone = SettableFuture.create<Operation>()
+        futureDone.set(
+            Operation.newBuilder()
+                .setName("b")
+                .setResponse(
+                    Any.newBuilder()
+                        .setValue(lroResponse.toByteString())
+                        .setTypeUrl("google.protobuf.StringValue")
+                        .build()
+                )
+                .setDone(true)
+                .build()
+        )
+
+        val opStub: OperationsGrpc.OperationsFutureStub = mock {
+            on { getOperation(any()) } doReturn future1
+            on { getOperation(any()) } doReturn futureDone
         }
-        val future1: ListenableFuture<CallResult<Operation>> = mock {
-            on { get() }.thenReturn(result1)
-        }
-        val resultDone: CallResult<Operation> = mock {
-            on { body }.thenReturn(Operation.newBuilder().setName("b").setDone(true).build())
-        }
-        val futureDone: ListenableFuture<CallResult<Operation>> = mock {
-            on { get() }.thenReturn(resultDone)
-        }
-        val grpcClient: GrpcClientStub<OperationsGrpc.OperationsFutureStub> = mock {
-            on { executeFuture<Operation>(any()) }
-                .thenReturn(future1)
-                .thenReturn(futureDone)
-        }
+        whenever(opStub.withInterceptors(any())).doReturn(opStub)
+        whenever(opStub.withOption(any<CallOptions.Key<*>>(), any())).doReturn(opStub)
+
+        val grpcClient = GrpcClientStub(opStub, ClientCallOptions())
 
         val future = SettableFuture.create<CallResult<Operation>>()
         future.set(
@@ -59,16 +74,15 @@ class LongRunningCallTest {
                     .build(), mock()
             )
         )
-        val lro = LongRunningCall(grpcClient, future, Operation::class.java)
+        val lro = LongRunningCall(grpcClient, future, StringValue::class.java)
         val result = lro.waitUntilDone()
 
-        assertThat(result.body).isInstanceOf(Operation::class.java)
-
-        verify(grpcClient, times(2)).executeFuture<Operation>(any())
+        assertThat(result.body).isInstanceOf(StringValue::class.java)
+        assertThat(result.body.value).isEqualTo("long time")
     }
 
     @Test
-    fun `behaves as a future`() {
+    fun `LRO behaves as a future`() {
         val operationFuture = SettableFuture.create<CallResult<Operation>>()
         val operation = Operation.newBuilder().setDone(true).build()
         operationFuture.set(CallResult(operation, ResponseMetadata()))

@@ -27,19 +27,37 @@ import io.grpc.Channel
 import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import io.grpc.stub.AbstractStub
+import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
+import kotlin.test.fail
 
 class StubFactoryTest {
 
     @Test
+    fun `creates stubs from factory`() {
+        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, "localhost")
+
+        try {
+            ByteArrayInputStream("{}".toByteArray(Charsets.UTF_8)).use {
+                factory.fromServiceAccount(it, listOf("scope2"))
+            }
+            fail("invalid key not detected")
+        } catch (ex: IOException) {
+            // normal due to invalid key
+        }
+        assertThat(factory.fromAccessToken(mock(), listOf("scope1")).stub)
+            .isInstanceOf(OperationsGrpc.OperationsFutureStub::class.java)
+
+        factory.shutdown()
+    }
+
+    @Test
     fun `Creates blocking stub from call credentials`() {
         val channel: ManagedChannel = mock()
-        val channelBuilder: ManagedChannelBuilder<*> = mock {
-            on { build() }.then { channel }
-        }
-        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channelBuilder)
+        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channel)
 
         val credentials: CallCredentials = mock()
         val stub = factory.fromCallCredentials(credentials)
@@ -51,10 +69,7 @@ class StubFactoryTest {
     @Test
     fun `Creates future stub from call credentials`() {
         val channel: ManagedChannel = mock()
-        val channelBuilder: ManagedChannelBuilder<*> = mock {
-            on { build() }.then { channel }
-        }
-        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channelBuilder)
+        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channel)
 
         val credentials: CallCredentials = mock()
         val stub = factory.fromCallCredentials(credentials)
@@ -66,10 +81,7 @@ class StubFactoryTest {
     @Test
     fun `Creates streaming stub from call credentials`() {
         val channel: ManagedChannel = mock()
-        val channelBuilder: ManagedChannelBuilder<*> = mock {
-            on { build() }.then { channel }
-        }
-        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channelBuilder)
+        val factory = StubFactory(OperationsGrpc.OperationsStub::class, channel)
 
         val credentials: CallCredentials = mock()
         val stub = factory.fromCallCredentials(credentials)
@@ -81,10 +93,7 @@ class StubFactoryTest {
     @Test
     fun `Throws on non stub type`() {
         val channel: ManagedChannel = mock()
-        val channelBuilder: ManagedChannelBuilder<*> = mock {
-            on { build() }.then { channel }
-        }
-        val factory = StubFactory(TestStub::class, channelBuilder)
+        val factory = StubFactory(TestStub::class, channel)
 
         assertFailsWith(IllegalArgumentException::class) {
             factory.fromCallCredentials(mock())
@@ -106,8 +115,8 @@ class StubFactoryTest {
         verify(channel).awaitTermination(2, TimeUnit.SECONDS)
     }
 
-    private class TestStub : AbstractStub<TestStub> {
-        constructor(channel: Channel, options: CallOptions) : super(channel, options)
+    private class TestStub(channel: Channel, options: CallOptions) :
+        AbstractStub<TestStub>(channel, options) {
 
         override fun build(channel: Channel, options: CallOptions): TestStub {
             return TestStub(channel, options)
