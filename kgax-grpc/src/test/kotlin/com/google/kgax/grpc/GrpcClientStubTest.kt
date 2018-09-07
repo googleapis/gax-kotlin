@@ -337,6 +337,34 @@ class GrpcClientStubTest {
     }
 
     @Test
+    fun `can be directly prepared`() {
+        val stub: TestStub = createTestStubMock()
+
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        val otherCall = call.prepare {
+            withMetadata("one", listOf("1"))
+        }
+
+        assertThat(call).isNotEqualTo(otherCall)
+        assertThat(otherCall.options.requestMetadata)
+            .containsExactlyEntriesIn(mapOf("one" to listOf("1")))
+    }
+
+    @Test
+    fun `can be prepared with options`() {
+        val stub: TestStub = createTestStubMock()
+
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        val otherCall = call.prepare(clientCallOptions {
+            withInitialRequest(StringValue("init!"))
+        })
+
+        assertThat(call).isNotEqualTo(otherCall)
+        assertThat(otherCall.options.initialStreamRequests)
+            .containsExactly(StringValue("init!"))
+    }
+
+    @Test
     fun `can handle successful callbacks`() {
         val call = SettableFuture.create<CallResult<StringValue>>()
         var successValue: String? = null
