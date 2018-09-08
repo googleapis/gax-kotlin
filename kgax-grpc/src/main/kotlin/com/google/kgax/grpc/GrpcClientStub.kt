@@ -240,7 +240,7 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
             }
 
             // add and initial requests
-            for (request in options.initialStreamRequests) {
+            for (request in options.initialRequests) {
                 @Suppress("UNCHECKED_CAST")
                 requestStream.send(request as ReqT)
             }
@@ -300,7 +300,7 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
             }
 
             // add and initial requests
-            for (request in options.initialStreamRequests) {
+            for (request in options.initialRequests) {
                 @Suppress("UNCHECKED_CAST")
                 requestStream.send(request as ReqT)
             }
@@ -379,15 +379,15 @@ fun <T : AbstractStub<T>> T.prepare(options: ClientCallOptions) = GrpcClientStub
  */
 class ClientCallOptions constructor(
     val credentials: CallCredentials? = null,
-    internal val requestMetadata: Map<String, List<String>> = mapOf(),
-    internal val initialStreamRequests: List<Any> = listOf(),
-    internal val interceptors: List<ClientInterceptor> = listOf()
+    val requestMetadata: Map<String, List<String>> = mapOf(),
+    val initialRequests: List<Any> = listOf(),
+    val interceptors: List<ClientInterceptor> = listOf()
 ) {
     internal val responseMetadata: ResponseMetadata = ResponseMetadata()
 
     constructor(opts: ClientCallOptions) : this(
         opts.credentials, opts.requestMetadata,
-        opts.initialStreamRequests, opts.interceptors
+        opts.initialRequests, opts.interceptors
     )
 
     constructor(builder: Builder) : this(
@@ -406,7 +406,7 @@ class ClientCallOptions constructor(
         constructor(opts: ClientCallOptions) : this(
             opts.credentials,
             opts.requestMetadata.toMutableMap(),
-            opts.initialStreamRequests.toMutableList(),
+            opts.initialRequests.toMutableList(),
             opts.interceptors.toMutableList()
         )
 

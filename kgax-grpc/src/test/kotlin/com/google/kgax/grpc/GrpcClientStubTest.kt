@@ -87,7 +87,7 @@ class GrpcClientStubTest {
 
         assertThat(opts).isNotEqualTo(newOpts)
         assertThat(newOpts.interceptors).containsExactly(interceptor1, interceptor2)
-        assertThat(newOpts.initialStreamRequests).containsExactly(StringValue("!"))
+        assertThat(newOpts.initialRequests).containsExactly(StringValue("!"))
         assertThat(newOpts.credentials).isNotNull()
         assertThat(newOpts.requestMetadata.keys).containsExactly("a", "b")
     }
@@ -107,7 +107,7 @@ class GrpcClientStubTest {
 
         assertThat(opts).isNotEqualTo(newOpts)
         assertThat(newOpts.interceptors).isEmpty()
-        assertThat(newOpts.initialStreamRequests).isEmpty()
+        assertThat(newOpts.initialRequests).isEmpty()
         assertThat(newOpts.credentials).isNotNull()
         assertThat(newOpts.requestMetadata.keys).containsExactly("b")
         assertThat(newOpts.requestMetadata.get("b")).containsExactly("bb")
@@ -479,7 +479,7 @@ class GrpcClientStubTest {
         })
 
         assertThat(call).isNotEqualTo(otherCall)
-        assertThat(otherCall.options.initialStreamRequests)
+        assertThat(otherCall.options.initialRequests)
             .containsExactly(StringValue("init!"))
     }
 
