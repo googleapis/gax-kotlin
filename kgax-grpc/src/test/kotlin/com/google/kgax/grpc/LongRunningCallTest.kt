@@ -24,6 +24,7 @@ import com.google.protobuf.Any
 import com.google.protobuf.StringValue
 import com.nhaarman.mockito_kotlin.any
 import com.nhaarman.mockito_kotlin.doReturn
+import com.nhaarman.mockito_kotlin.eq
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.whenever
 import io.grpc.CallOptions
@@ -56,12 +57,17 @@ class LongRunningCallTest {
                 .build()
         )
 
+        val callContext = ClientCallContext()
+        val callOptions: CallOptions = mock {
+            on { getOption(eq(ClientCallContext.KEY)) } doReturn callContext
+        }
         val opStub: OperationsGrpc.OperationsFutureStub = mock {
             on { getOperation(any()) } doReturn future1
             on { getOperation(any()) } doReturn futureDone
         }
         whenever(opStub.withInterceptors(any())).doReturn(opStub)
         whenever(opStub.withOption(any<CallOptions.Key<*>>(), any())).doReturn(opStub)
+        whenever(opStub.callOptions).doReturn(callOptions)
 
         val grpcClient = GrpcClientStub(opStub, ClientCallOptions())
 

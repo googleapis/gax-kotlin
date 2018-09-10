@@ -19,6 +19,7 @@ package com.google.kgax.examples.grpc
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.support.v4.app.ActivityCompat
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
@@ -100,6 +101,16 @@ class StreamingActivity : AppCompatActivity() {
                 onError = { Log.e(TAG, "uh oh", it) }
                 onCompleted = { Log.i(TAG, "All done!") }
             }
+
+            object : CountDownTimer(5_000, 5_000) {
+                override fun onFinish() {
+                    stream.responses.close()
+                }
+
+                override fun onTick(millisUntilFinished: Long) {
+                }
+
+            }.start()
         } else {
             Log.e(TAG, "No permission to record! Please allow and then relaunch the app!")
         }

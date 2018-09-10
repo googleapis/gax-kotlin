@@ -16,16 +16,7 @@
 
 package com.google.kgax.grpc
 
-import io.grpc.CallOptions
-import io.grpc.Channel
-import io.grpc.ClientCall
-import io.grpc.ClientInterceptor
-import io.grpc.ForwardingClientCall
-import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener
 import io.grpc.Metadata
-import io.grpc.MethodDescriptor
-
-internal const val CALL_OPTION_METADATA = "meta"
 
 /**
  * Response metadata from the API (gRPC trailing metadata).
@@ -48,37 +39,5 @@ open class ResponseMetadata {
     /** The last value for the key */
     open fun get(key: String): String? {
         return metadata?.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER))
-    }
-
-    companion object {
-        val KEY: CallOptions.Key<ResponseMetadata> = CallOptions.Key.create(CALL_OPTION_METADATA)
-    }
-}
-
-/** Adds optional metadata support to API calls. */
-internal class ResponseMetadataInterceptor : ClientInterceptor {
-
-    override fun <ReqT, RespT> interceptCall(
-        method: MethodDescriptor<ReqT, RespT>,
-        callOptions: CallOptions,
-        next: Channel
-    ): ClientCall<ReqT, RespT> {
-        return object : ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
-            next.newCall(method, callOptions)
-        ) {
-            override fun start(
-                responseListener: ClientCall.Listener<RespT>,
-                headers: io.grpc.Metadata
-            ) {
-                delegate().start(
-                    object : SimpleForwardingClientCallListener<RespT>(responseListener) {
-                        override fun onHeaders(headers: Metadata?) {
-                            val opt = callOptions.getOption(ResponseMetadata.KEY)
-                            opt?.metadata = headers
-                        }
-                    }, headers
-                )
-            }
-        }
     }
 }

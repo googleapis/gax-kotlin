@@ -35,11 +35,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".FutureActivity" />
-        <activity android:name=".LROActivity" />
-        <activity android:name=".MetadataActivity" />
-        <activity android:name=".StreamingActivity" />
-        <activity android:name=".PagingActivity" />
+        <activity android:name=".FutureActivity">
+        </activity>
+        <activity android:name=".LROActivity">
+        </activity>
+        <activity android:name=".MetadataActivity">
+        </activity>
+        <activity android:name=".StreamingActivity">
+        </activity>
+        <activity android:name=".PagingActivity">
+        </activity>
     </application>
 
 </manifest>

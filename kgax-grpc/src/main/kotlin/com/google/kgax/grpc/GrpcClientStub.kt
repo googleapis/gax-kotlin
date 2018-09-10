@@ -53,37 +53,7 @@ annotation class DecoratorMarker
  * val response = stub.executeBlocking { it -> it.someApiMethod(...) }
  * ```
  */
-class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCallOptions) {
-
-    var stub: T
-        private set
-
-    init {
-        // add response metadata
-        stub = originalStub
-            .withInterceptors(ResponseMetadataInterceptor())
-            .withOption(ResponseMetadata.KEY, options.responseMetadata)
-
-        // add request metadata
-        if (options.requestMetadata.isNotEmpty()) {
-            val header = io.grpc.Metadata()
-            for ((k, v) in options.requestMetadata) {
-                val key = io.grpc.Metadata.Key.of(k, io.grpc.Metadata.ASCII_STRING_MARSHALLER)
-                v.forEach { header.put(key, it) }
-            }
-            stub = MetadataUtils.attachHeaders(stub, header)
-        }
-
-        // add auth
-        if (options.credentials != null) {
-            stub = stub.withCallCredentials(options.credentials)
-        }
-
-        // add advanced features
-        if (options.interceptors.any()) {
-            stub = stub.withInterceptors(*options.interceptors.toTypedArray())
-        }
-    }
+class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: ClientCallOptions) {
 
     /**
      * Prepare a decorated call to create a [GrpcClientStub]. For example:
@@ -103,13 +73,10 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
      * functionality provided by this library.
      */
     fun prepare(init: ClientCallOptions.Builder.() -> Unit = {}): GrpcClientStub<T> {
-        val builder = ClientCallOptions.Builder()
+        val builder = ClientCallOptions.Builder(options)
         builder.init()
-        return GrpcClientStub(stub, ClientCallOptions(builder))
+        return GrpcClientStub(originalStub, ClientCallOptions(builder))
     }
-
-    /** Prepare a decorated call */
-    fun prepare(options: ClientCallOptions) = GrpcClientStub(stub, ClientCallOptions(options))
 
     /**
      * Execute a blocking call. For example:
@@ -128,8 +95,9 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
      * [ResponseMetadata], will be returned.
      */
     fun <RespT : MessageLite> executeBlocking(method: (T) -> RespT): CallResult<RespT> {
+        val stub = stubWithContext()
         val response = method(stub)
-        return CallResult(response, options.responseMetadata)
+        return CallResult(response, stub.context.responseMetadata)
     }
 
     /**
@@ -153,13 +121,15 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
      */
     fun <RespT : MessageLite> executeFuture(
         method: (T) -> ListenableFuture<RespT>
-    ): ListenableFuture<CallResult<RespT>> =
-        Futures.transform(method(stub)) {
+    ): ListenableFuture<CallResult<RespT>> {
+        val stub = stubWithContext()
+        return Futures.transform(method(stub)) {
             CallResult(
                 it ?: throw IllegalStateException("Future returned null value"),
-                options.responseMetadata
+                stub.context.responseMetadata
             )
         }
+    }
 
     /**
      * Execute a long running operation. For example:
@@ -180,11 +150,12 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
         type: Class<RespT>,
         method: (T) -> ListenableFuture<Operation>
     ): LongRunningCall<RespT> {
+        val stub = stubWithContext()
         val operationsStub = GrpcClientStub(OperationsGrpc.newFutureStub(stub.channel), options)
         val future = Futures.transform(method(stub)) {
             CallResult(
                 it ?: throw IllegalStateException("Future returned null value"),
-                options.responseMetadata
+                stub.context.responseMetadata
             )
         }
         return LongRunningCall(operationsStub, future, type)
@@ -218,6 +189,8 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): StreamingCall<ReqT, RespT> {
+        val stub = stubWithContext()
+
         // starts the call
         val doStart = { responseStream: ResponseStreamImpl<RespT> ->
             // handle requests
@@ -251,7 +224,10 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
         // handle responses
         val responseStream = object : ResponseStreamImpl<RespT>() {
             override fun close() {
-                TODO("not implemented")
+                stub.context.call.cancel(
+                        "explicit close() called by client",
+                        StreamingMethodClosedException()
+                )
             }
         }
 
@@ -281,6 +257,8 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     fun <ReqT : MessageLite, RespT : MessageLite> executeClientStreaming(
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): ClientStreamingCall<ReqT, RespT> {
+        val stub = stubWithContext()
+
         // starts the call
         val doStart = { responseFuture: SettableFuture<RespT> ->
             val requestObserver = method(stub)(object : StreamObserver<RespT> {
@@ -337,6 +315,8 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
     fun <RespT : MessageLite> executeServerStreaming(
         method: (T, StreamObserver<RespT>) -> Unit
     ): ServerStreamingCall<RespT> {
+        val stub = stubWithContext()
+
         // starts the call
         val doStart = { responseStream: ResponseStreamImpl<RespT> ->
             method(stub, object : StreamObserver<RespT> {
@@ -356,13 +336,57 @@ class GrpcClientStub<T : AbstractStub<T>>(originalStub: T, val options: ClientCa
 
         val responseStream = object : ResponseStreamImpl<RespT>() {
             override fun close() {
-                TODO("not implemented")
+                stub.context.call.cancel(
+                        "explicit close() called by client",
+                        StreamingMethodClosedException()
+                )
             }
         }
 
         return ServerStreamingCallImpl(doStart, responseStream)
     }
+
+    /**
+     * Gets a one-time use stub with an initial (empty) context.
+     *
+     * This should be called before each API method call.
+     */
+    private fun stubWithContext(): T {
+        // add gax interceptor
+        var stub = originalStub
+            .withInterceptors(GAXInterceptor())
+            .withOption(ClientCallContext.KEY, ClientCallContext())
+
+        // add request metadata
+        if (options.requestMetadata.isNotEmpty()) {
+            val header = io.grpc.Metadata()
+            for ((k, v) in options.requestMetadata) {
+                val key = io.grpc.Metadata.Key.of(k, io.grpc.Metadata.ASCII_STRING_MARSHALLER)
+                v.forEach { header.put(key, it) }
+            }
+            stub = MetadataUtils.attachHeaders(stub, header)
+        }
+
+        // add auth
+        if (options.credentials != null) {
+            stub = stub.withCallCredentials(options.credentials)
+        }
+
+        // add advanced features
+        if (options.interceptors.any()) {
+            stub = stub.withInterceptors(*options.interceptors.toTypedArray())
+        }
+
+        return stub
+    }
 }
+
+/** Indicates the user explictly closed the connection */
+class StreamingMethodClosedException : Exception()
+
+/** Get the call context associated with a one time use stub */
+private val <T : AbstractStub<T>> T.context: ClientCallContext
+    get() = this.callOptions.getOption(ClientCallContext.KEY)
 
 /** see [GrpcClientStub.prepare] */
 fun <T : AbstractStub<T>> T.prepare(init: ClientCallOptions.Builder.() -> Unit = {}): GrpcClientStub<T> {
@@ -383,12 +407,6 @@ class ClientCallOptions constructor(
     val initialRequests: List<Any> = listOf(),
     val interceptors: List<ClientInterceptor> = listOf()
 ) {
-    internal val responseMetadata: ResponseMetadata = ResponseMetadata()
-
-    constructor(opts: ClientCallOptions) : this(
-        opts.credentials, opts.requestMetadata,
-        opts.initialRequests, opts.interceptors
-    )
 
     constructor(builder: Builder) : this(
         builder.credentials, builder.requestMetadata,
@@ -457,7 +475,7 @@ class ClientCallOptions constructor(
     }
 }
 
-fun clientCallOptions(init: ClientCallOptions.Builder.() -> Unit = {}): ClientCallOptions {
+internal fun clientCallOptions(init: ClientCallOptions.Builder.() -> Unit = {}): ClientCallOptions {
     val builder = ClientCallOptions.Builder()
     builder.apply(init)
     return builder.build()
@@ -538,7 +556,7 @@ interface ServerStreamingCall<RespT> {
     fun start(init: (ResponseStream<RespT>.() -> Unit)?)
 }
 
-internal class StreamingCallImpl<ReqT, RespT> (
+internal class StreamingCallImpl<ReqT, RespT>(
     private val start: (ResponseStreamImpl<RespT>) -> RequestStream<ReqT>,
     private val responseStream: ResponseStreamImpl<RespT>
 ) : StreamingCall<ReqT, RespT> {

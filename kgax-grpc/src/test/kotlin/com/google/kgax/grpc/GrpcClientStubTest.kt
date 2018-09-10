@@ -23,19 +23,23 @@ import com.google.longrunning.Operation
 import com.google.protobuf.Int32Value
 import com.google.protobuf.StringValue
 import com.nhaarman.mockito_kotlin.any
+import com.nhaarman.mockito_kotlin.eq
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.never
+import com.nhaarman.mockito_kotlin.reset
 import com.nhaarman.mockito_kotlin.times
 import com.nhaarman.mockito_kotlin.verify
 import com.nhaarman.mockito_kotlin.whenever
 import io.grpc.CallOptions
 import io.grpc.Channel
+import io.grpc.ClientCall
 import io.grpc.ClientInterceptor
 import io.grpc.stub.AbstractStub
 import io.grpc.stub.StreamObserver
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.util.concurrent.ExecutionException
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.fail
@@ -44,6 +48,17 @@ class GrpcClientStubTest {
 
     fun StringValue(value: String): StringValue = StringValue.newBuilder().setValue(value).build()
     fun Int32Value(value: Int): Int32Value = Int32Value.newBuilder().setValue(value).build()
+
+    private val channel: Channel = mock()
+    private val clientCall: ClientCall<*, *> = mock()
+    private val callOptions: CallOptions = mock()
+    private val responseMetadata: ResponseMetadata = mock()
+    private val callContext: ClientCallContext = mock()
+
+    @BeforeTest
+    fun before() {
+        reset(channel, clientCall, callOptions, responseMetadata, callContext)
+    }
 
     @Test
     fun `ClientCallOptions remembers metadata`() {
@@ -474,9 +489,9 @@ class GrpcClientStubTest {
         val stub: TestStub = createTestStubMock()
 
         val call = GrpcClientStub(stub, ClientCallOptions())
-        val otherCall = call.prepare(clientCallOptions {
+        val otherCall = call.prepare {
             withInitialRequest(StringValue("init!"))
-        })
+        }
 
         assertThat(call).isNotEqualTo(otherCall)
         assertThat(otherCall.options.initialRequests)
@@ -595,10 +610,14 @@ class GrpcClientStubTest {
 
     private fun createTestStubMock(): TestStub {
         val stub: TestStub = mock()
-        whenever(stub.channel).thenReturn(mock())
+        whenever(stub.channel).thenReturn(channel)
         whenever(stub.withInterceptors(any())).thenReturn(stub)
         whenever(stub.withCallCredentials(any())).thenReturn(stub)
         whenever(stub.withOption(any(), any<Any>())).thenReturn(stub)
+        whenever(stub.callOptions).thenReturn(callOptions)
+        whenever(callOptions.getOption(eq(ClientCallContext.KEY))).thenReturn(callContext)
+        whenever(callContext.call).thenReturn(clientCall)
+        whenever(callContext.responseMetadata).thenReturn(responseMetadata)
         return stub
     }
 

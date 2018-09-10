@@ -55,11 +55,11 @@ class ResponseMetadataTest {
 
     @Test
     fun `can intercept headers`() {
-        val responseMetadata = ResponseMetadata()
-        whenever(callOptions.getOption(ResponseMetadata.KEY))
-            .doReturn(responseMetadata)
+        val callContext = ClientCallContext()
+        whenever(callOptions.getOption(ClientCallContext.KEY))
+            .doReturn(callContext)
 
-        val interceptor = ResponseMetadataInterceptor()
+        val interceptor = GAXInterceptor()
         interceptor.interceptCall(method, callOptions, channel)
             .start(responseListener, mock())
 
@@ -69,18 +69,21 @@ class ResponseMetadataTest {
             it.onHeaders(metadata)
         }, any())
 
-        assertThat(responseMetadata.keys()).containsExactly("testkey")
-        assertThat(responseMetadata.get("testkey")).isEqualTo("this is meta")
-        assertThat(responseMetadata.getAll("testKey")).containsExactly("this is meta")
+        assertThat(callContext.responseMetadata.keys())
+            .containsExactly("testkey")
+        assertThat(callContext.responseMetadata.get("testkey"))
+            .isEqualTo("this is meta")
+        assertThat(callContext.responseMetadata.getAll("testKey"))
+            .containsExactly("this is meta")
     }
 
     @Test
     fun `can intercept multiple headers`() {
-        val responseMetadata = ResponseMetadata()
-        whenever(callOptions.getOption(ResponseMetadata.KEY))
-            .doReturn(responseMetadata)
+        val callContext = ClientCallContext()
+        whenever(callOptions.getOption(ClientCallContext.KEY))
+            .doReturn(callContext)
 
-        val interceptor = ResponseMetadataInterceptor()
+        val interceptor = GAXInterceptor()
         interceptor.interceptCall(method, callOptions, channel)
             .start(responseListener, mock())
 
@@ -92,19 +95,23 @@ class ResponseMetadataTest {
             it.onHeaders(metadata)
         }, any())
 
-        assertThat(responseMetadata.keys()).containsExactly("testkey", "anotherkey")
-        assertThat(responseMetadata.get("testkey")).isEqualTo("two")
-        assertThat(responseMetadata.getAll("testKey")).containsExactly("one", "two")
-        assertThat(responseMetadata.get("anotherkey")).isEqualTo("three")
+        assertThat(callContext.responseMetadata.keys())
+            .containsExactly("testkey", "anotherkey")
+        assertThat(callContext.responseMetadata.get("testkey"))
+            .isEqualTo("two")
+        assertThat(callContext.responseMetadata.getAll("testKey"))
+            .containsExactly("one", "two")
+        assertThat(callContext.responseMetadata.get("anotherkey"))
+            .isEqualTo("three")
     }
 
     @Test
     fun `does not make up headers`() {
-        val responseMetadata = ResponseMetadata()
-        whenever(callOptions.getOption(ResponseMetadata.KEY))
-            .doReturn(responseMetadata)
+        val callContext = ClientCallContext()
+        whenever(callOptions.getOption(ClientCallContext.KEY))
+            .doReturn(callContext)
 
-        val interceptor = ResponseMetadataInterceptor()
+        val interceptor = GAXInterceptor()
         interceptor.interceptCall(method, callOptions, channel)
             .start(responseListener, mock())
 
@@ -114,7 +121,7 @@ class ResponseMetadataTest {
             it.onHeaders(metadata)
         }, any())
 
-        assertThat(responseMetadata.get("wrong")).isNull()
-        assertThat(responseMetadata.getAll("wrong")).isNull()
+        assertThat(callContext.responseMetadata.get("wrong")).isNull()
+        assertThat(callContext.responseMetadata.getAll("wrong")).isNull()
     }
 }

@@ -48,7 +48,7 @@ class StubFactoryTest {
         } catch (ex: IOException) {
             // normal due to invalid key
         }
-        assertThat(factory.fromAccessToken(mock(), listOf("scope1")).stub)
+        assertThat(factory.fromAccessToken(mock(), listOf("scope1")).originalStub)
             .isInstanceOf(OperationsGrpc.OperationsFutureStub::class.java)
 
         factory.shutdown()
