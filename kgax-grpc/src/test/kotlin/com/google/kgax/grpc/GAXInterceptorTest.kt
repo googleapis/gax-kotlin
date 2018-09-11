@@ -32,7 +32,7 @@ import io.grpc.MethodDescriptor
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 
-class ResponseMetadataTest {
+class GAXInterceptorTest {
 
     val method: MethodDescriptor<String, String> = mock()
     val clientCall: ClientCall<String, String> = mock()
@@ -123,5 +123,21 @@ class ResponseMetadataTest {
 
         assertThat(callContext.responseMetadata.get("wrong")).isNull()
         assertThat(callContext.responseMetadata.getAll("wrong")).isNull()
+    }
+
+    @Test
+    fun `starts with null headers`() {
+        val callContext = ClientCallContext()
+        whenever(callOptions.getOption(ClientCallContext.KEY))
+            .doReturn(callContext)
+
+        val interceptor = GAXInterceptor()
+        interceptor.interceptCall(method, callOptions, channel)
+            .start(responseListener, mock())
+
+        assertThat(callContext.responseMetadata.metadata).isNull()
+        assertThat(callContext.responseMetadata.keys()).isEmpty()
+        assertThat(callContext.responseMetadata.get(TEST_KEY.name())).isNull()
+        assertThat(callContext.responseMetadata.getAll(TEST_KEY.name())).isNull()
     }
 }

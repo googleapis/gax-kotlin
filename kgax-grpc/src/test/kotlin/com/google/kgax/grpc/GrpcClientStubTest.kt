@@ -17,12 +17,15 @@
 package com.google.kgax.grpc
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import com.google.longrunning.Operation
 import com.google.protobuf.Int32Value
 import com.google.protobuf.StringValue
 import com.nhaarman.mockito_kotlin.any
+import com.nhaarman.mockito_kotlin.check
+import com.nhaarman.mockito_kotlin.doReturn
 import com.nhaarman.mockito_kotlin.eq
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.never
@@ -30,6 +33,7 @@ import com.nhaarman.mockito_kotlin.reset
 import com.nhaarman.mockito_kotlin.times
 import com.nhaarman.mockito_kotlin.verify
 import com.nhaarman.mockito_kotlin.whenever
+import io.grpc.CallCredentials
 import io.grpc.CallOptions
 import io.grpc.Channel
 import io.grpc.ClientCall
@@ -39,6 +43,7 @@ import io.grpc.stub.StreamObserver
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executor
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -125,12 +130,12 @@ class GrpcClientStubTest {
         assertThat(newOpts.initialRequests).isEmpty()
         assertThat(newOpts.credentials).isNotNull()
         assertThat(newOpts.requestMetadata.keys).containsExactly("b")
-        assertThat(newOpts.requestMetadata.get("b")).containsExactly("bb")
+        assertThat(newOpts.requestMetadata["b"]).containsExactly("bb")
     }
 
     @Test(expected = IOException::class)
     fun `ClientCallOptions can use credentials`() {
-        val opts = clientCallOptions {
+        clientCallOptions {
             ByteArrayInputStream("{}".toByteArray()).use {
                 withServiceAccountCredentials(it)
             }
@@ -139,7 +144,7 @@ class GrpcClientStubTest {
 
     @Test(expected = IOException::class)
     fun `ClientCallOptions can use scoped credentials`() {
-        val opts = clientCallOptions {
+        clientCallOptions {
             ByteArrayInputStream("{}".toByteArray()).use {
                 withServiceAccountCredentials(it, listOf("scope"))
             }
@@ -179,12 +184,31 @@ class GrpcClientStubTest {
         val future = SettableFuture.create<StringValue>()
         future.set(StringValue("hi"))
 
-        val call = GrpcClientStub(stub, ClientCallOptions())
+        val credentials: CallCredentials = mock()
+        val interceptor: ClientInterceptor = mock()
+
+        val call = GrpcClientStub(
+            stub, ClientCallOptions(
+                credentials = credentials,
+                interceptors = listOf(interceptor),
+                initialRequests = listOf("junk")
+            )
+        )
         val result = call.executeFuture { arg ->
             assertThat(arg).isEqualTo(stub)
             future
         }
         assertThat(result.get().body.value).isEqualTo("hi")
+    }
+
+    @Test(expected = ExecutionException::class)
+    fun `Throws on an invalid null future call`() {
+        val stub: TestStub = createTestStubMock()
+        val future = SettableFuture.create<StringValue>()
+        future.set(null)
+
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        call.executeFuture { _ -> future }.get()
     }
 
     @Test
@@ -204,6 +228,18 @@ class GrpcClientStubTest {
         }
         result.get()
         assertThat(result.operation).isEqualTo(operation)
+    }
+
+    @Test(expected = ExecutionException::class)
+    fun `Throws on an invalid null long running call`() {
+        val stub: TestStub = createTestStubMock()
+
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        call.executeLongRunning(StringValue::class.java) {
+            val operationFuture = SettableFuture.create<Operation>()
+            operationFuture.set(null)
+            operationFuture
+        }.get()
     }
 
     @Test
@@ -229,10 +265,11 @@ class GrpcClientStubTest {
         val exceptions = mutableListOf<Throwable>()
         var complete = false
 
-        result.responses.onNext = { responses.add(it.value) }
-        result.responses.onError = { exceptions.add(it) }
-        result.responses.onCompleted = { complete = true }
-        result.start()
+        result.start {
+            onNext = { responses.add(it.value) }
+            onError = { exceptions.add(it) }
+            onCompleted = { complete = true }
+        }
 
         result.requests.send(Int32Value(1))
         result.requests.send(Int32Value(2))
@@ -249,6 +286,23 @@ class GrpcClientStubTest {
         assertThat(responses).containsExactly("one", "two")
         assertThat(exceptions).containsExactly(exception)
         assertThat(complete).isTrue()
+
+        // repeat with executor
+        val executor: Executor = mock()
+        result.responses.executor = executor
+        outStream?.onNext(StringValue("4"))
+        outStream?.onError(exception)
+        outStream?.onCompleted()
+
+        verify(executor, times(3)).execute(any())
+        verify(clientCall, never()).cancel(any(), any())
+
+        // close the steam
+        result.responses.close()
+
+        verify(clientCall).cancel(any(), check {
+            assertThat(it).isInstanceOf(StreamingMethodClosedException::class.java)
+        })
     }
 
     @Test
@@ -258,13 +312,11 @@ class GrpcClientStubTest {
 
         // capture output stream
         val call = GrpcClientStub(stub, ClientCallOptions())
-        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
-            return inStream
-        }
+        val method = { _: StreamObserver<StringValue> -> inStream }
 
         val result = call.executeStreaming { arg ->
             assertThat(arg).isEqualTo(stub)
-            ::method
+            method
         }
         result.start()
 
@@ -284,13 +336,11 @@ class GrpcClientStubTest {
 
         // capture output stream
         val call = GrpcClientStub(stub, ClientCallOptions())
-        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
-            return inStream
-        }
+        val method = { _: StreamObserver<StringValue> -> inStream }
 
         val result = call.executeStreaming { arg ->
             assertThat(arg).isEqualTo(stub)
-            ::method
+            method
         }
 
         result.requests.send(Int32Value(1))
@@ -344,13 +394,11 @@ class GrpcClientStubTest {
 
         // capture output stream
         val call = GrpcClientStub(stub, ClientCallOptions())
-        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
-            return inStream
-        }
+        val method = { _: StreamObserver<StringValue> -> inStream }
 
         val result = call.executeClientStreaming { arg ->
             assertThat(arg).isEqualTo(stub)
-            ::method
+            method
         }
         result.start()
 
@@ -365,19 +413,17 @@ class GrpcClientStubTest {
 
     @Test(expected = kotlin.UninitializedPropertyAccessException::class)
     fun `Throws when a client streaming call is not started`() {
-        listOf(null, RuntimeException("failed")).forEach { ex ->
+        listOf(null, RuntimeException("failed")).forEach { _ ->
             val stub: TestStub = createTestStubMock()
             val inStream: StreamObserver<Int32Value> = mock()
 
             // capture output stream
             val call = GrpcClientStub(stub, ClientCallOptions())
-            fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
-                return inStream
-            }
+            val method = { _: StreamObserver<StringValue> -> inStream }
 
             val result = call.executeClientStreaming { arg ->
                 assertThat(arg).isEqualTo(stub)
-                ::method
+                method
             }
 
             result.requests.send(Int32Value.newBuilder().setValue(10).build())
@@ -417,6 +463,23 @@ class GrpcClientStubTest {
         assertThat(responses).containsExactly("one", "two")
         assertThat(exceptions).containsExactly(exception)
         assertThat(complete).isTrue()
+
+        // repeat with executor
+        val executor: Executor = mock()
+        result.responses.executor = executor
+        outStream?.onNext(StringValue("8"))
+        outStream?.onError(exception)
+        outStream?.onCompleted()
+
+        verify(executor, times(3)).execute(any())
+        verify(clientCall, never()).cancel(any(), any())
+
+        // close the steam
+        result.responses.close()
+
+        verify(clientCall).cancel(any(), check {
+            assertThat(it).isInstanceOf(StreamingMethodClosedException::class.java)
+        })
     }
 
     @Test
@@ -606,6 +669,14 @@ class GrpcClientStubTest {
         call.setException(RuntimeException())
 
         assertThat(err).isInstanceOf(RuntimeException::class.java)
+    }
+
+    @Test
+    fun `can get the result of self`() {
+        val future: ListenableFuture<String> = mock {
+            on { get() } doReturn "ok then"
+        }
+        future.get { assertThat(it).isEqualTo("ok then") }
     }
 
     private fun createTestStubMock(): TestStub {
