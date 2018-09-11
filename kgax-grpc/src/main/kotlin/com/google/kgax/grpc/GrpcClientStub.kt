@@ -44,7 +44,7 @@ annotation class DecoratorMarker
  *
  * You don't typically need to create instance of this class directly. Instead use
  * the [prepare] method that this library defines for all gRPC stubs, which will
- * ensure the [stub] and [options] are setup correctly.
+ * ensure the [originalStub] and [options] are setup correctly.
  *
  * For example:
  * ```
@@ -195,17 +195,26 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         val doStart = { responseStream: ResponseStreamImpl<RespT> ->
             // handle requests
             val requestObserver = method(stub)(object : StreamObserver<RespT> {
-                override fun onNext(value: RespT) =
-                    responseStream.executor?.execute { responseStream.onNext(value) }
-                        ?: responseStream.onNext(value)
+                override fun onNext(value: RespT) {
+                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreNextIf(value))) {
+                        responseStream.executor?.execute { responseStream.onNext(value) }
+                            ?: responseStream.onNext(value)
+                    }
+                }
 
-                override fun onError(t: Throwable) =
-                    responseStream.executor?.execute { responseStream.onError(t) }
-                        ?: responseStream.onError(t)
+                override fun onError(t: Throwable) {
+                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreErrorIf(t))) {
+                        responseStream.executor?.execute { responseStream.onError(t) }
+                            ?: responseStream.onError(t)
+                    }
+                }
 
-                override fun onCompleted() =
-                    responseStream.executor?.execute { responseStream.onCompleted() }
-                        ?: responseStream.onCompleted()
+                override fun onCompleted() {
+                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreCompletedIf())) {
+                        responseStream.executor?.execute { responseStream.onCompleted() }
+                            ?: responseStream.onCompleted()
+                    }
+                }
             })
             val requestStream: RequestStream<ReqT> = object : RequestStream<ReqT> {
                 override fun send(request: ReqT) = requestObserver.onNext(request)
@@ -225,8 +234,8 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         val responseStream = object : ResponseStreamImpl<RespT>() {
             override fun close() {
                 stub.context.call.cancel(
-                        "explicit close() called by client",
-                        StreamingMethodClosedException()
+                    "explicit close() called by client",
+                    StreamingMethodClosedException()
                 )
             }
         }
@@ -320,25 +329,34 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         // starts the call
         val doStart = { responseStream: ResponseStreamImpl<RespT> ->
             method(stub, object : StreamObserver<RespT> {
-                override fun onNext(value: RespT) =
-                    responseStream.executor?.execute { responseStream.onNext(value) }
-                        ?: responseStream.onNext(value)
+                override fun onNext(value: RespT) {
+                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreNextIf(value))) {
+                        responseStream.executor?.execute { responseStream.onNext(value) }
+                            ?: responseStream.onNext(value)
+                    }
+                }
 
-                override fun onError(t: Throwable) =
-                    responseStream.executor?.execute { responseStream.onError(t) }
-                        ?: responseStream.onError(t)
+                override fun onError(t: Throwable) {
+                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreErrorIf(t))) {
+                        responseStream.executor?.execute { responseStream.onError(t) }
+                            ?: responseStream.onError(t)
+                    }
+                }
 
-                override fun onCompleted() =
-                    responseStream.executor?.execute { responseStream.onCompleted() }
-                        ?: responseStream.onCompleted()
+                override fun onCompleted() {
+                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreCompletedIf())) {
+                        responseStream.executor?.execute { responseStream.onCompleted() }
+                            ?: responseStream.onCompleted()
+                    }
+                }
             })
         }
 
         val responseStream = object : ResponseStreamImpl<RespT>() {
             override fun close() {
                 stub.context.call.cancel(
-                        "explicit close() called by client",
-                        StreamingMethodClosedException()
+                    "explicit close() called by client",
+                    StreamingMethodClosedException()
                 )
             }
         }
@@ -503,10 +521,28 @@ interface RequestStream<ReqT> : AutoCloseable {
 
 /** A stream of responses from the server. */
 interface ResponseStream<RespT> : AutoCloseable {
+    /** Called when the next result is available */
     var onNext: (RespT) -> Unit
+
+    /** Called when the stream ends with an error. */
     var onError: (Throwable) -> Unit
+
+    /** Called when the stream has ended an d will receive no more responses. */
     var onCompleted: () -> Unit
 
+    /** Suppress [onNext], [onCompleted], and [onError] callbacks when the predicate is true. */
+    var ignoreIf: () -> Boolean
+
+    /** Suppress [onNext] callback when the predicate is true. */
+    var ignoreNextIf: (RespT) -> Boolean
+
+    /** Suppress [onError] callback when the predicate is true. */
+    var ignoreErrorIf: (Throwable) -> Boolean
+
+    /** Suppress [onCompleted] callback when the predicate is true. */
+    var ignoreCompletedIf: () -> Boolean
+
+    /** Executor to use for the result */
     var executor: Executor?
 }
 
@@ -515,6 +551,10 @@ internal abstract class ResponseStreamImpl<RespT>(
     override var onNext: (RespT) -> Unit = {},
     override var onError: (Throwable) -> Unit = {},
     override var onCompleted: () -> Unit = {},
+    override var ignoreIf: () -> Boolean = { false },
+    override var ignoreNextIf: (RespT) -> Boolean = { _ -> false },
+    override var ignoreErrorIf: (Throwable) -> Boolean = { _ -> false },
+    override var ignoreCompletedIf: () -> Boolean = { false },
     override var executor: Executor? = null
 ) : ResponseStream<RespT>
 
@@ -601,11 +641,20 @@ typealias FutureCall<T> = ListenableFuture<CallResult<T>>
 
 @DecoratorMarker
 class Callback<T> {
+    /** Called when the call completes successfully. */
     var success: (CallResult<T>) -> Unit = {}
+
+    /** Called when an error occurs. */
     var error: (Throwable) -> Unit = {}
-    var ignoreIf: (() -> Boolean)? = null
-    var ignoreResultIf: ((CallResult<T>) -> Boolean)? = null
-    var ignoreErrorIf: ((Throwable) -> Boolean)? = null
+
+    /** Suppress [success] and [error] callbacks when the predicate is true. */
+    var ignoreIf: (() -> Boolean) = { false }
+
+    /** Suppress [success] callback when the predicate is true. */
+    var ignoreResultIf: ((CallResult<T>) -> Boolean) = { _ -> false }
+
+    /** Suppress [error] callback when the predicate is true */
+    var ignoreErrorIf: ((Throwable) -> Boolean) = { _ -> false }
 }
 
 /** Add a [callback] that will be run on the provided [executor] when the CallResult is available */
@@ -614,24 +663,20 @@ fun <T> FutureCall<T>.on(executor: Executor, callback: Callback<T>.() -> Unit) {
         val cb = Callback<T>().apply(callback)
 
         override fun onSuccess(result: CallResult<T>?) {
-            val ignoreAll = cb.ignoreIf?.let { it() } ?: false
-            val ignore = cb.ignoreResultIf?.let { it(result!!) } ?: false
-
-            if (!ignoreAll && !ignore) {
-                cb.success(result!!)
+            if (!ignore(cb.ignoreIf(), cb.ignoreResultIf(result!!))) {
+                cb.success(result)
             }
         }
 
         override fun onFailure(t: Throwable?) {
-            val ignoreAll = cb.ignoreIf?.let { it() } ?: false
-            val ignore = cb.ignoreErrorIf?.let { it(t!!) } ?: false
-
-            if (!ignoreAll && !ignore) {
-                cb.error(t!!)
+            if (!ignore(cb.ignoreIf(), cb.ignoreErrorIf(t!!))) {
+                cb.error(t)
             }
         }
     }, executor)
 }
+
+private fun ignore(vararg conditions: Boolean) = conditions.any { it }
 
 /** Get the result of the future */
 inline fun <T> ListenableFuture<T>.get(handler: (T) -> Unit) = handler(this.get())

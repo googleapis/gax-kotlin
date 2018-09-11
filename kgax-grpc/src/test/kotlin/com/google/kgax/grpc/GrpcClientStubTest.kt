@@ -306,6 +306,62 @@ class GrpcClientStubTest {
     }
 
     @Test
+    fun `Can ignore streaming call events`() {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        var outStream: StreamObserver<StringValue>? = null
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            outStream = outs
+            return inStream
+        }
+
+        val result = call.executeStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            ::method
+        }
+
+        result.start {
+            onNext = { fail("onNext called") }
+            onError = { fail("onError called") }
+            onCompleted = { fail("onCompleted called") }
+            ignoreIf = { true }
+        }
+
+        // fake output from server
+        outStream?.onNext(StringValue("data"))
+        outStream?.onError(RuntimeException())
+        outStream?.onCompleted()
+
+        // repeat for the individual flags
+        for (prop in listOf("complete", "error", "next")) {
+            var complete = false
+            var error = false
+            var next = false
+
+            result.responses.let { stream ->
+                stream.ignoreIf = { false }
+                stream.ignoreNextIf = { _ -> prop == "next" }
+                stream.ignoreErrorIf = { _ -> prop == "error" }
+                stream.ignoreCompletedIf = { prop == "complete" }
+                stream.onNext = { next = true }
+                stream.onError = { error = true }
+                stream.onCompleted = { complete = true }
+            }
+
+            outStream?.onNext(StringValue("stuff"))
+            outStream?.onError(RuntimeException())
+            outStream?.onCompleted()
+
+            assertThat(next).isEqualTo(prop != "next")
+            assertThat(error).isEqualTo(prop != "error")
+            assertThat(complete).isEqualTo(prop != "complete")
+        }
+    }
+
+    @Test
     fun `Can close a streaming call request stream`() {
         val stub: TestStub = createTestStubMock()
         val inStream: StreamObserver<Int32Value> = mock()
@@ -480,6 +536,56 @@ class GrpcClientStubTest {
         verify(clientCall).cancel(any(), check {
             assertThat(it).isInstanceOf(StreamingMethodClosedException::class.java)
         })
+    }
+
+    @Test
+    fun `Can ignore server streaming call events`() {
+        val stub: TestStub = createTestStubMock()
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        var outStream: StreamObserver<StringValue>? = null
+        val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
+            assertThat(it).isEqualTo(stub)
+            outStream = observer
+        }
+
+        result.start {
+            onNext = { fail("onNext called") }
+            onError = { fail("onError called") }
+            onCompleted = { fail("onCompleted called") }
+            ignoreIf = { true }
+        }
+
+        // fake output from server
+        outStream?.onNext(StringValue("data"))
+        outStream?.onError(RuntimeException())
+        outStream?.onCompleted()
+
+        // repeat for the individual flags
+        for (prop in listOf("complete", "error", "next")) {
+            var complete = false
+            var error = false
+            var next = false
+
+            result.responses.let { stream ->
+                stream.ignoreIf = { false }
+                stream.ignoreNextIf = { _ -> prop == "next" }
+                stream.ignoreErrorIf = { _ -> prop == "error" }
+                stream.ignoreCompletedIf = { prop == "complete" }
+                stream.onNext = { next = true }
+                stream.onError = { error = true }
+                stream.onCompleted = { complete = true }
+            }
+
+            outStream?.onNext(StringValue("stuff"))
+            outStream?.onError(RuntimeException())
+            outStream?.onCompleted()
+
+            assertThat(next).isEqualTo(prop != "next")
+            assertThat(error).isEqualTo(prop != "error")
+            assertThat(complete).isEqualTo(prop != "complete")
+        }
     }
 
     @Test
