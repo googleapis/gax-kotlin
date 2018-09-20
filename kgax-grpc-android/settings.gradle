@@ -14,4 +14,4 @@
  * limitations under the License.
  */
 
-rootProject.name = 'kgax-grpc-netty'
+rootProject.name = 'kgax-grpc-android'

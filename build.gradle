@@ -48,7 +48,7 @@ dependencies {
 
     compile project(':kgax-core')
     compile project(':kgax-grpc')
-    compile project(':kgax-grpc-netty')
+    compile project(':kgax-grpc-android')
 }
 
 archivesBaseName = 'kgax'
