@@ -21,3 +21,6 @@ project(":kgax-core").projectDir = file("../kgax-core")
 
 include ":kgax-grpc"
 project(":kgax-grpc").projectDir = file("../kgax-grpc")
+
+include ":kgax-grpc-base"
+project(":kgax-grpc-base").projectDir = file("../kgax-grpc-base")
