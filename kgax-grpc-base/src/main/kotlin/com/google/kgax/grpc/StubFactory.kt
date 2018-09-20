@@ -24,7 +24,6 @@ import io.grpc.Channel
 import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import io.grpc.auth.MoreCallCredentials
-import io.grpc.okhttp.OkHttpChannelBuilder
 import io.grpc.stub.AbstractStub
 import io.grpc.stub.StreamObserver
 import java.io.InputStream
@@ -45,6 +44,22 @@ class StubFactory<T : AbstractStub<T>> {
     val channel: ManagedChannel
 
     /**
+     * Creates a new factory using an the available gRPC implementation for the provided [stubType]
+     * that will communicate with the server at the given [host] and [port].
+     *
+     * If [enableRetry] is enabled then failed operations will be retried when it's safe to do so.
+     *
+     * This method will create a new channel via the [channel] property. Don't forget to call
+     * [ManagedChannel.shutdown] to dispose of the channel when it is no longer needed.
+     */
+    constructor(stubType: KClass<T>, host: String, port: Int = 443, enableRetry: Boolean = false) :
+        this(stubType, ManagedChannelBuilder.forAddress(host, port), {
+            if (enableRetry) {
+                enableRetry()
+            }
+        })
+
+    /**
      * Creates a new factory for the [stubType] with the given [channel].
      *
      * Don't forget to call [ManagedChannel.shutdown] to dispose of the channel when it is no
@@ -56,22 +71,12 @@ class StubFactory<T : AbstractStub<T>> {
     }
 
     /**
-     * Creates a new factory using an [OkHttpChannelBuilder] for the provided [stubType]
-     * that will communicate with the server at the given [host] and [port].
+     * Creates a new factory with the given [builder].
      *
-     * If [enableRetry] is enabled then failed operations will be retried when it's safe to do so.
-     *
-     * This method will create a new channel via the [channel] property. Don't forget to call
-     * [ManagedChannel.shutdown] to dispose of the channel when it is no longer needed.
+     * Don't forget to call [ManagedChannel.shutdown] to dispose of the channel when it is no
+     * longer needed.
      */
-    constructor (stubType: KClass<T>, host: String, port: Int = 443, enableRetry: Boolean = true) :
-        this(stubType, OkHttpChannelBuilder.forAddress(host, port), {
-            if (enableRetry) {
-                enableRetry()
-            }
-        })
-
-    internal constructor(
+    constructor(
         stubType: KClass<T>,
         builder: ManagedChannelBuilder<*>,
         init: ManagedChannelBuilder<*>.() -> Unit = {}
@@ -82,8 +87,7 @@ class StubFactory<T : AbstractStub<T>> {
     }
 
     /**
-     * Creates a stub from a service account JSON [keyFile] with the provided [oauthScopes]
-     * and any additional [options].
+     * Creates a stub from a service account JSON [keyFile] with the provided [oauthScopes].
      */
     fun fromServiceAccount(keyFile: InputStream, oauthScopes: List<String>) =
         fromCallCredentials(
@@ -93,8 +97,7 @@ class StubFactory<T : AbstractStub<T>> {
         )
 
     /**
-     * Creates a stub from a access [token] with the provided [oauthScopes] and any additional
-     * [options].
+     * Creates a stub from a access [token] with the provided [oauthScopes].
      */
     fun fromAccessToken(token: AccessToken, oauthScopes: List<String>) =
         fromCallCredentials(
@@ -103,15 +106,17 @@ class StubFactory<T : AbstractStub<T>> {
             )
         )
 
-    internal fun fromCallCredentials(creds: CallCredentials): GrpcClientStub<T> {
+    internal fun fromCallCredentials(credentials: CallCredentials): GrpcClientStub<T> {
         // instantiate stub
         try {
             val constructor = stubType.java
                 .declaringClass
                 .getMethod(getFactoryMethodName(stubType.java), Channel::class.java)
+
+            @Suppress("UNCHECKED_CAST")
             return GrpcClientStub(
                 constructor.invoke(null, channel) as T,
-                ClientCallOptions(credentials = creds)
+                ClientCallOptions(credentials = credentials)
             )
         } catch (e: NoSuchMethodException) {
             throw IllegalArgumentException("Invalid stub type (missing static factory method)", e)
@@ -134,13 +139,13 @@ class StubFactory<T : AbstractStub<T>> {
     private fun getFactoryMethodName(type: Class<T>): String {
         return when {
             type.methods.any {
-                it.returnType.name.equals(ListenableFuture::class.java.name)
+                it.returnType.name == ListenableFuture::class.java.name
             } -> "newFutureStub"
             type.methods.any {
-                it.returnType.name.equals(StreamObserver::class.java.name)
+                it.returnType.name == StreamObserver::class.java.name
             } -> "newStub"
             type.methods.flatMap { it.parameterTypes.asIterable() }.any {
-                it.name.equals(StreamObserver::class.java.name)
+                it.name == StreamObserver::class.java.name
             } -> "newStub"
             else -> "newBlockingStub"
         }

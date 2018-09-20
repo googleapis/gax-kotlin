@@ -26,32 +26,17 @@ import io.grpc.CallOptions
 import io.grpc.Channel
 import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
+import io.grpc.ManagedChannelProvider
 import io.grpc.stub.AbstractStub
-import java.io.ByteArrayInputStream
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
-import kotlin.test.fail
 
 class StubFactoryTest {
 
-    @Test
+    @Test(expected = ManagedChannelProvider.ProviderNotFoundException::class)
     fun `creates stubs from factory`() {
-        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, "localhost")
-
-        try {
-            ByteArrayInputStream("{}".toByteArray(Charsets.UTF_8)).use {
-                factory.fromServiceAccount(it, listOf("scope2"))
-            }
-            fail("invalid key not detected")
-        } catch (ex: IOException) {
-            // normal due to invalid key
-        }
-        assertThat(factory.fromAccessToken(mock(), listOf("scope1")).originalStub)
-            .isInstanceOf(OperationsGrpc.OperationsFutureStub::class.java)
-
-        factory.shutdown()
+        StubFactory(OperationsGrpc.OperationsFutureStub::class, "localhost")
     }
 
     @Test

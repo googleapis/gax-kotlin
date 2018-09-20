@@ -4,7 +4,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *  
+ *
  *     https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -33,28 +33,43 @@ version '0.1.0-SNAPSHOT'
 
 apply plugin: 'idea'
 apply plugin: 'kotlin'
-apply plugin: 'com.google.protobuf'
 apply plugin: 'org.jetbrains.dokka'
+apply plugin: 'com.google.protobuf'
+apply plugin: 'jacoco'
 
 repositories {
+    google()
     mavenCentral()
+    jcenter()
+}
+
+configurations {
+    ktlint
 }
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
 
+    compile project(':kgax-core')
+
     implementation 'javax.annotation:javax.annotation-api:1.3.2'
-    implementation 'com.google.code.gson:gson:2.8.5'
 
-    compile 'com.google.protobuf:protobuf-lite:3.0.1'
+    implementation "io.grpc:grpc-protobuf-lite:$grpc_version"
 
-    testImplementation 'junit:junit:4.12'
+    compile "io.grpc:grpc-stub:$grpc_version"
+    compile "io.grpc:grpc-auth:$grpc_version"
+    compile 'com.google.auth:google-auth-library-oauth2-http:0.9.1'
+    compile 'com.google.auth:google-auth-library-credentials:0.9.1'
+
+    testImplementation "junit:junit:$junit_version"
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
     testImplementation 'com.nhaarman:mockito-kotlin:1.6.0'
     testImplementation "com.google.truth:truth:0.41"
+
+    ktlint "com.github.shyiko:ktlint:$ktlint_version"
 }
 
-archivesBaseName = 'kgax-core'
+archivesBaseName = 'kgax-grpc-base'
 
 compileKotlin {
     kotlinOptions.jvmTarget = "1.8"
@@ -68,8 +83,8 @@ protobuf {
         artifact = 'com.google.protobuf:protoc:3.6.1'
     }
     plugins {
-        javalite {
-            artifact = 'com.google.protobuf:protoc-gen-javalite:3.0.0'
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java:1.10.0'
         }
     }
     generateProtoTasks {
@@ -78,7 +93,9 @@ protobuf {
                 remove java
             }
             task.plugins {
-                javalite {}
+                grpc {
+                    option 'lite'
+                }
             }
         }
     }
@@ -87,7 +104,7 @@ protobuf {
 sourceSets {
     main {
         java {
-            srcDirs += file("${protobuf.generatedFilesBaseDir}/main/javalite")
+            srcDirs += file("${protobuf.generatedFilesBaseDir}/main/grpc")
         }
     }
 }
@@ -100,4 +117,46 @@ dokka {
         prefix = "com.google.protobuf"
         suppress = true
     }
+}
+
+jar {
+    exclude "**/*.proto"
+}
+
+jacoco {
+    toolVersion = "0.8.2"
+}
+
+jacocoTestReport {
+    reports {
+        xml.enabled = true
+        html.enabled = true
+    }
+    sourceDirectories = files([
+            "src/main/kotlin"
+    ])
+    afterEvaluate {
+        classDirectories = files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: ['com/google/bytestream/**', 'com/google/longrunning/**'])
+        })
+    }
+}
+
+check.dependsOn jacocoTestReport
+test.finalizedBy(project.tasks.jacocoTestReport)
+
+task ktlint(type: JavaExec, group: "verification") {
+    description = "Check Kotlin code style."
+    main = "com.github.shyiko.ktlint.Main"
+    classpath = configurations.ktlint
+    args "src/**/*.kt", "test/**/*.kt"
+}
+check.dependsOn ktlint
+
+
+task ktlintFormat(type: JavaExec, group: "formatting") {
+    description = "Fix Kotlin code style deviations."
+    main = "com.github.shyiko.ktlint.Main"
+    classpath = configurations.ktlint
+    args "-F", "src/**/*.kt", "test/**/*.kt"
 }

@@ -14,9 +14,4 @@
  * limitations under the License.
  */
 
-rootProject.name = 'kgax'
-
-include 'kgax-core'
-include 'kgax-grpc'
-include 'kgax-grpc-base'
-include 'kgax-grpc-netty'
+rootProject.name = 'kgax-grpc-netty'

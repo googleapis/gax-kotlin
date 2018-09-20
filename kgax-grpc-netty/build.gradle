@@ -35,6 +35,10 @@ repositories {
     jcenter()
 }
 
+configurations {
+    ktlint
+}
+
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
 
@@ -43,14 +47,14 @@ dependencies {
 
     implementation 'javax.annotation:javax.annotation-api:1.3.2'
 
-    compile "io.grpc:grpc-okhttp:$grpc_version"
-    compile "io.grpc:grpc-protobuf-lite:$grpc_version"
+    compile "io.grpc:grpc-netty-shaded:$grpc_version"
+    compile "io.grpc:grpc-protobuf:$grpc_version"
 
     testImplementation "junit:junit:$junit_version"
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
 }
 
-archivesBaseName = 'kgax-grpc'
+archivesBaseName = 'kgax-grpc-netty'
 
 compileKotlin {
     kotlinOptions.jvmTarget = "1.8"

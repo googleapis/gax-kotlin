@@ -16,6 +16,11 @@
 
 buildscript {
     ext.kotlin_version = '1.2.61'
+    ext.dokka_version = '0.9.17'
+    ext.ktlint_version = '0.28.0'
+
+    ext.grpc_version = '1.15.0'
+    ext.junit_version = '4.12'
 
     repositories {
         mavenLocal()
@@ -31,10 +36,8 @@ version '0.1.0'
 
 apply plugin: 'idea'
 apply plugin: 'kotlin'
-apply plugin: 'maven-publish'
 
 repositories {
-    mavenLocal()
     google()
     mavenCentral()
 }
@@ -44,6 +47,7 @@ dependencies {
 
     compile project(':kgax-core')
     compile project(':kgax-grpc')
+    compile project(':kgax-grpc-netty')
 }
 
 archivesBaseName = 'kgax'
@@ -55,22 +59,9 @@ compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-        }
-    }
-}
-
 subprojects {
-    apply plugin: 'maven-publish'
-
-    publishing {
-        publications {
-            "$project.name"(MavenPublication) {
-                from components.java
-            }
-        }
+    ext {
+        kotlin_version = "$kotlin_version"
+        dokka_version = "$dokka_version"
     }
 }

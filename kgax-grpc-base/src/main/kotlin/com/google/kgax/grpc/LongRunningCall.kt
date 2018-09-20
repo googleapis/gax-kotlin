@@ -76,6 +76,7 @@ class LongRunningCall<T : MessageLite>(
     /** Parse the result of the [op] to the given [type] or throw an error */
     private fun <T : MessageLite> parseResult(op: Operation, type: Class<T>): T {
         if (op.error == null || op.error.code == Status.Code.OK.value()) {
+            @Suppress("UNCHECKED_CAST")
             return type.getMethod(
                 "parseFrom",
                 ByteString::class.java
