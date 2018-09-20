@@ -56,7 +56,7 @@ dependencies {
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
 }
 
-archivesBaseName = 'kgax-grpc-netty'
+archivesBaseName = 'kgax-grpc-android'
 
 compileKotlin {
     kotlinOptions.jvmTarget = "1.8"
