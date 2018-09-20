@@ -33,6 +33,7 @@ version '0.1.0-SNAPSHOT'
 
 apply plugin: 'idea'
 apply plugin: 'kotlin'
+apply plugin: 'maven'
 apply plugin: 'com.google.protobuf'
 apply plugin: 'org.jetbrains.dokka'
 
