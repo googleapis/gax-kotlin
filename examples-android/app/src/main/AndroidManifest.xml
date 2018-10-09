@@ -37,6 +37,8 @@
         </activity>
         <activity android:name=".FutureActivity">
         </activity>
+        <activity android:name=".RetryActivity">
+        </activity>
         <activity android:name=".LROActivity">
         </activity>
         <activity android:name=".MetadataActivity">

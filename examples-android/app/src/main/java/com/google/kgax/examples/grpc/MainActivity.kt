@@ -32,8 +32,6 @@ import com.google.kgax.grpc.StubFactory
  *
  * This is the same as [FutureActivity], but shows the use of a blocking stub
  * rather than a future based stub (futures are generally recommended).
- *
- * @author jbolinger
  */
 class MainActivity : AppCompatActivity() {
 
@@ -79,10 +77,6 @@ class MainActivity : AppCompatActivity() {
                         .build())
             }
             return response.body
-        }
-
-        override fun onPostExecute(result: AnalyzeEntitiesResponse) {
-            onResult("The API says: $result")
         }
     }
 }

@@ -77,7 +77,7 @@ class FutureActivity : AppCompatActivity() {
                                 .build())
                         .build())
             }
-            val (body, metadata) = response.get()
+            val (body, _) = response.get()
             return body
         }
 

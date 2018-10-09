@@ -22,7 +22,10 @@ import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
+import com.google.kgax.NoRetry
 import com.google.kgax.Page
+import com.google.kgax.Retry
+import com.google.kgax.RetryContext
 import com.google.longrunning.Operation
 import com.google.longrunning.OperationsGrpc
 import com.google.protobuf.MessageLite
@@ -33,10 +36,15 @@ import io.grpc.stub.AbstractStub
 import io.grpc.stub.MetadataUtils
 import io.grpc.stub.StreamObserver
 import java.io.InputStream
+import java.util.Timer
+import java.util.TimerTask
 import java.util.concurrent.Executor
 
 @DslMarker
 annotation class DecoratorMarker
+
+// timer used for retries
+private val RETRY_TIMER = Timer()
 
 /**
  * A convenience wrapper for gRPC stubs that enables ease of use and the
@@ -122,13 +130,9 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     fun <RespT : MessageLite> executeFuture(
         method: (T) -> ListenableFuture<RespT>
     ): ListenableFuture<CallResult<RespT>> {
-        val stub = stubWithContext()
-        return Futures.transform(method(stub)) {
-            CallResult(
-                it ?: throw IllegalStateException("Future returned null value"),
-                stub.context.responseMetadata
-            )
-        }
+        val future: SettableFuture<CallResult<RespT>> = SettableFuture.create()
+        executeFuture(method, future, RetryContext())
+        return future
     }
 
     /**
@@ -150,15 +154,39 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         type: Class<RespT>,
         method: (T) -> ListenableFuture<Operation>
     ): LongRunningCall<RespT> {
-        val stub = stubWithContext()
-        val operationsStub = GrpcClientStub(OperationsGrpc.newFutureStub(stub.channel), options)
-        val future = Futures.transform(method(stub)) {
-            CallResult(
-                it ?: throw IllegalStateException("Future returned null value"),
-                stub.context.responseMetadata
-            )
-        }
+        val operationsStub = GrpcClientStub(OperationsGrpc.newFutureStub(stubWithContext().channel), options)
+        val future: SettableFuture<CallResult<Operation>> = SettableFuture.create()
+        executeFuture(method, future, RetryContext())
         return LongRunningCall(operationsStub, future, type)
+    }
+
+    private fun <RespT : MessageLite> executeFuture(
+        method: (T) -> ListenableFuture<RespT>,
+        resultFuture: SettableFuture<CallResult<RespT>>,
+        retryContext: RetryContext
+    ) {
+        val stub = stubWithContext()
+        Futures.addCallback(method(stub), object : FutureCallback<RespT> {
+            override fun onSuccess(result: RespT?) {
+                resultFuture.set(
+                    CallResult(
+                        result ?: throw IllegalStateException("Future returned null value"),
+                        stub.context.responseMetadata
+                    )
+                )
+            }
+
+            override fun onFailure(t: Throwable) {
+                val retryAfter = options.retry.retryAfter(t, retryContext)
+                if (retryAfter != null) {
+                    RETRY_TIMER.schedule(object : TimerTask() {
+                        override fun run() = executeFuture(method, resultFuture, retryContext.next())
+                    }, retryAfter)
+                } else {
+                    resultFuture.setException(t)
+                }
+            }
+        })
     }
 
     /**
@@ -423,12 +451,16 @@ class ClientCallOptions constructor(
     val credentials: CallCredentials? = null,
     val requestMetadata: Map<String, List<String>> = mapOf(),
     val initialRequests: List<Any> = listOf(),
-    val interceptors: List<ClientInterceptor> = listOf()
+    val interceptors: List<ClientInterceptor> = listOf(),
+    val retry: Retry = NoRetry
 ) {
 
     constructor(builder: Builder) : this(
-        builder.credentials, builder.requestMetadata,
-        builder.initialStreamRequests, builder.interceptors
+        builder.credentials,
+        builder.requestMetadata,
+        builder.initialStreamRequests,
+        builder.interceptors,
+        builder.retry
     )
 
     @DecoratorMarker
@@ -436,14 +468,16 @@ class ClientCallOptions constructor(
         internal var credentials: CallCredentials? = null,
         internal val requestMetadata: MutableMap<String, List<String>> = mutableMapOf(),
         internal val initialStreamRequests: MutableList<Any> = mutableListOf(),
-        internal val interceptors: MutableList<ClientInterceptor> = mutableListOf()
+        internal val interceptors: MutableList<ClientInterceptor> = mutableListOf(),
+        internal var retry: Retry = NoRetry
     ) {
 
         constructor(opts: ClientCallOptions) : this(
             opts.credentials,
             opts.requestMetadata.toMutableMap(),
             opts.initialRequests.toMutableList(),
-            opts.interceptors.toMutableList()
+            opts.interceptors.toMutableList(),
+            opts.retry
         )
 
         /** Set service account credentials for authentication */
@@ -487,6 +521,11 @@ class ClientCallOptions constructor(
         /** Append arbitrary interceptors (for advanced use) */
         fun withInterceptor(interceptor: ClientInterceptor) {
             interceptors.add(interceptor)
+        }
+
+        /** Use the given [retry] settings */
+        fun withRetry(retry: Retry) {
+            this.retry = retry
         }
 
         fun build() = ClientCallOptions(this)
