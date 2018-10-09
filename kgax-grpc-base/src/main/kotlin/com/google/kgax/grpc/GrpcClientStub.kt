@@ -103,9 +103,28 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * [ResponseMetadata], will be returned.
      */
     fun <RespT : MessageLite> executeBlocking(method: (T) -> RespT): CallResult<RespT> {
-        val stub = stubWithContext()
-        val response = method(stub)
-        return CallResult(response, stub.context.responseMetadata)
+        return executeBlocking(method, RetryContext())
+    }
+
+    private fun <RespT : MessageLite> executeBlocking(
+        method: (T) -> RespT,
+        retryContext: RetryContext
+    ): CallResult<RespT> {
+        try {
+            val stub = stubWithContext()
+            val response = method(stub)
+            return CallResult(response, stub.context.responseMetadata)
+        } catch (t: Throwable) {
+            val retryAfter = options.retry.retryAfter(t, retryContext)
+            if (retryAfter != null) {
+                try {
+                    Thread.sleep(retryAfter)
+                } catch (int: InterruptedException) { /* ignore */ }
+                return executeBlocking(method, retryContext.next())
+            } else {
+                throw t
+            }
+        }
     }
 
     /**
@@ -166,14 +185,14 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         retryContext: RetryContext
     ) {
         val stub = stubWithContext()
+
         Futures.addCallback(method(stub), object : FutureCallback<RespT> {
             override fun onSuccess(result: RespT?) {
-                resultFuture.set(
-                    CallResult(
-                        result ?: throw IllegalStateException("Future returned null value"),
-                        stub.context.responseMetadata
-                    )
-                )
+                if (result != null) {
+                    resultFuture.set(CallResult(result, stub.context.responseMetadata))
+                } else {
+                    resultFuture.setException(IllegalStateException("Future returned null value"))
+                }
             }
 
             override fun onFailure(t: Throwable) {

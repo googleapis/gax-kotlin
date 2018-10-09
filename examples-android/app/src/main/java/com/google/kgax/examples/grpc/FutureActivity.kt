@@ -69,7 +69,7 @@ class FutureActivity : AppCompatActivity() {
             val onResult: (String) -> Unit
     ) : AsyncTask<Unit, Unit, AnalyzeEntitiesResponse>() {
         override fun doInBackground(vararg params: Unit) : AnalyzeEntitiesResponse {
-            val response = stub.executeFuture { it ->
+            val response = stub.executeFuture {
                 it.analyzeEntities(AnalyzeEntitiesRequest.newBuilder()
                         .setDocument(Document.newBuilder()
                                 .setContent("Hi there Joe")
