@@ -20,6 +20,8 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
+import com.google.kgax.Retry
+import com.google.kgax.RetryContext
 import com.google.longrunning.Operation
 import com.google.protobuf.Int32Value
 import com.google.protobuf.StringValue
@@ -42,6 +44,7 @@ import io.grpc.stub.AbstractStub
 import io.grpc.stub.StreamObserver
 import java.io.ByteArrayInputStream
 import java.io.IOException
+import java.lang.IllegalArgumentException
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executor
 import kotlin.test.BeforeTest
@@ -93,6 +96,7 @@ class GrpcClientStubTest {
     fun `ClientCallOptions can be built from an existing option`() {
         val interceptor1: ClientInterceptor = mock()
         val interceptor2: ClientInterceptor = mock()
+        val retry: Retry = mock()
 
         val opts = clientCallOptions {
             withAccessToken(mock(), listOf("scope"))
@@ -101,6 +105,7 @@ class GrpcClientStubTest {
             withInitialRequest(StringValue("!"))
             withMetadata("a", listOf("aa", "aaa"))
             withMetadata("b", listOf("bb"))
+            withRetry(retry)
         }
 
         val newOpts = ClientCallOptions.Builder(opts).build()
@@ -110,6 +115,7 @@ class GrpcClientStubTest {
         assertThat(newOpts.initialRequests).containsExactly(StringValue("!"))
         assertThat(newOpts.credentials).isNotNull()
         assertThat(newOpts.requestMetadata.keys).containsExactly("a", "b")
+        assertThat(newOpts.retry).isEqualTo(retry)
     }
 
     @Test
@@ -160,7 +166,39 @@ class GrpcClientStubTest {
             assertThat(arg).isEqualTo(stub)
             StringValue("hey there")
         }
+
         assertThat(result.body.value).isEqualTo("hey there")
+    }
+
+    @Test
+    fun `Can retry a blocking call`() {
+        val stub: TestStub = createTestStubMock()
+        val exception = RuntimeException("oh no!")
+
+        val retry = object : Retry {
+            var executed = false
+
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                assertThat(error).isEqualTo(exception)
+                assertThat(context.numberOfAttempts).isEqualTo(0)
+                executed = true
+                return 400
+            }
+        }
+
+        val call = GrpcClientStub(stub, ClientCallOptions()).prepare {
+            withRetry(retry)
+        }
+        val result: CallResult<StringValue> = call.executeBlocking { arg ->
+            assertThat(arg).isEqualTo(stub)
+            if (!retry.executed) {
+                throw exception
+            }
+            StringValue("hey there again")
+        }
+
+        assertThat(result.body.value).isEqualTo("hey there again")
+        assertThat(retry.executed).isTrue()
     }
 
     @Test
@@ -201,6 +239,51 @@ class GrpcClientStubTest {
         assertThat(result.get().body.value).isEqualTo("hi")
     }
 
+    @Test
+    fun `Can retry a future call`() {
+        val stub: TestStub = createTestStubMock()
+        val exception = IllegalArgumentException("bad news!")
+
+        val future1 = SettableFuture.create<StringValue>()
+        val future2 = SettableFuture.create<StringValue>()
+        future1.setException(exception)
+        future2.set(StringValue("hi again"))
+
+        val credentials: CallCredentials = mock()
+        val interceptor: ClientInterceptor = mock()
+
+        val retry = object : Retry {
+            var executed = false
+
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                assertThat(error).isEqualTo(exception)
+                assertThat(context.numberOfAttempts).isEqualTo(0)
+                executed = true
+                return 400
+            }
+        }
+
+        val call = GrpcClientStub(
+            stub, ClientCallOptions(
+                credentials = credentials,
+                interceptors = listOf(interceptor),
+                initialRequests = listOf("junk"),
+                retry = retry
+            )
+        )
+        val result = call.executeFuture { arg ->
+            assertThat(arg).isEqualTo(stub)
+            if (!retry.executed) {
+                future1
+            } else {
+                future2
+            }
+        }
+
+        assertThat(result.get().body.value).isEqualTo("hi again")
+        assertThat(retry.executed).isTrue()
+    }
+
     @Test(expected = ExecutionException::class)
     fun `Throws on an invalid null future call`() {
         val stub: TestStub = createTestStubMock()
@@ -228,6 +311,46 @@ class GrpcClientStubTest {
         }
         result.get()
         assertThat(result.operation).isEqualTo(operation)
+    }
+
+    @Test
+    fun `Can retry a long running call`() {
+        val stub: TestStub = createTestStubMock()
+        val exception = IllegalArgumentException("bad lro")
+        val operation = Operation.newBuilder()
+            .setName("the op")
+            .setDone(true)
+            .build()
+
+        val errorFuture = SettableFuture.create<Operation>()
+        errorFuture.setException(exception)
+
+        val retry = object : Retry {
+            var executed = false
+
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                assertThat(error).isEqualTo(exception)
+                assertThat(context.numberOfAttempts).isEqualTo(0)
+                executed = true
+                return 400
+            }
+        }
+
+        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        val result = call.executeLongRunning(StringValue::class.java) { arg ->
+            assertThat(arg).isEqualTo(stub)
+            val operationFuture = SettableFuture.create<Operation>()
+            operationFuture.set(operation)
+            if (!retry.executed) {
+                errorFuture
+            } else {
+                operationFuture
+            }
+        }
+        result.get()
+
+        assertThat(result.operation).isEqualTo(operation)
+        assertThat(retry.executed).isTrue()
     }
 
     @Test(expected = ExecutionException::class)
