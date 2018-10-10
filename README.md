@@ -11,12 +11,12 @@ a code generator to produce higher-level client libraries leveraging gRPC.
 
 KGax currently includes:
 
-  1. **kgax-core**: Common dependencies for the other modules below.
-  1. **kgax-grpc**: Utilities for using gRPC Java stubs in Kotlin.
+  1. **kgax-grpc**: Utilities for using gRPC Java stubs in Kotlin using the Netty transport provider.
+  1. **kgax-grpc-android**: Same, but using the OkHttp transport provider.
 
 ## Usage
 
-Refer to the examples in the `kgax-grpc-examples` directory.
+Refer to the examples in the `examples-android` directory.
 
 ## Contributing
 

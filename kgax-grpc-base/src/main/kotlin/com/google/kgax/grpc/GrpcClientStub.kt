@@ -117,7 +117,8 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             if (retryAfter != null) {
                 try {
                     Thread.sleep(retryAfter)
-                } catch (int: InterruptedException) { /* ignore */
+                } catch (int: InterruptedException) {
+                    // ignore
                 }
                 return executeBlocking(method, retryContext.next())
             } else {
@@ -783,8 +784,8 @@ fun <T> FutureCall<T>.on(executor: Executor, callback: Callback<T>.() -> Unit) {
             }
         }
 
-        override fun onFailure(t: Throwable?) {
-            if (!ignore(cb.ignoreIf(), cb.ignoreErrorIf(t!!))) {
+        override fun onFailure(t: Throwable) {
+            if (!ignore(cb.ignoreIf(), cb.ignoreErrorIf(t))) {
                 cb.error(t)
             }
         }
