@@ -16,6 +16,7 @@
 
 package com.google.kgax.grpc
 
+import com.google.auth.oauth2.AccessToken
 import com.google.common.truth.Truth.assertThat
 import com.google.longrunning.OperationsGrpc
 import com.nhaarman.mockito_kotlin.mock
@@ -28,6 +29,8 @@ import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import io.grpc.ManagedChannelProvider
 import io.grpc.stub.AbstractStub
+import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -37,6 +40,46 @@ class StubFactoryTest {
     @Test(expected = ManagedChannelProvider.ProviderNotFoundException::class)
     fun `creates stubs from factory`() {
         StubFactory(OperationsGrpc.OperationsFutureStub::class, "localhost")
+    }
+
+    @Test(expected = ManagedChannelProvider.ProviderNotFoundException::class)
+    fun `creates stubs from factory with options`() {
+        StubFactory(OperationsGrpc.OperationsFutureStub::class, "localhost", 8080, true)
+    }
+
+    @Test(expected = IOException::class)
+    fun `creates stubs from service account`() {
+        val channel: ManagedChannel = mock()
+        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channel)
+
+        val creds =
+            """
+            |{
+            |  "type": "service_account",
+            |  "client_id": "bar",
+            |  "client_email": "foo@example.com",
+            |  "private_key_id": "foo",
+            |  "private_key": "-"
+            |}""".trimMargin()
+        try {
+            ByteArrayInputStream(creds.toByteArray()).use {
+                factory.fromServiceAccount(it, listOf("a", "b"))
+            }
+        } catch (ex: IOException) {
+            assertThat(ex.message).contains("Invalid PKCS#8 data")
+            throw ex
+        }
+    }
+
+    @Test
+    fun `creates stubs from access token`() {
+        val channel: ManagedChannel = mock()
+        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channel)
+
+        val token: AccessToken = mock()
+        val stub = factory.fromAccessToken(token, listOf("a", "b"))
+
+        assertThat(stub).isNotNull()
     }
 
     @Test
@@ -49,6 +92,8 @@ class StubFactoryTest {
 
         assertThat(stub).isNotNull()
         assertThat(stub.options.credentials).isEqualTo(credentials)
+
+        assertThat(factory.channel).isEqualTo(channel)
     }
 
     @Test
@@ -61,6 +106,8 @@ class StubFactoryTest {
 
         assertThat(stub).isNotNull()
         assertThat(stub.options.credentials).isEqualTo(credentials)
+
+        assertThat(factory.channel).isEqualTo(channel)
     }
 
     @Test
@@ -73,6 +120,8 @@ class StubFactoryTest {
 
         assertThat(stub).isNotNull()
         assertThat(stub.options.credentials).isEqualTo(credentials)
+
+        assertThat(factory.channel).isEqualTo(channel)
     }
 
     @Test

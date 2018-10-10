@@ -117,7 +117,8 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             if (retryAfter != null) {
                 try {
                     Thread.sleep(retryAfter)
-                } catch (int: InterruptedException) { /* ignore */
+                } catch (int: InterruptedException) {
+                    // ignore
                 }
                 return executeBlocking(method, retryContext.next())
             } else {

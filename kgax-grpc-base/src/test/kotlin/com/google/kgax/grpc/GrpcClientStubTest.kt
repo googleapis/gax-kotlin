@@ -169,6 +169,17 @@ class GrpcClientStubTest {
         assertThat(result.body.value).isEqualTo("hey there")
     }
 
+    @Test(expected = RuntimeException::class)
+    fun `Throws on a failed a blocking call`() {
+        val stub: TestStub = createTestStubMock()
+
+        val call = GrpcClientStub(stub, ClientCallOptions())
+        call.executeBlocking { arg ->
+            assertThat(arg).isEqualTo(stub)
+            throw RuntimeException("no good!")
+        }
+    }
+
     @Test
     fun `Can retry a blocking call`() {
         val stub: TestStub = createTestStubMock()
@@ -236,6 +247,35 @@ class GrpcClientStubTest {
             future
         }
         assertThat(result.get().body.value).isEqualTo("hi")
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun `Throws on a failed future call`() {
+        val stub: TestStub = createTestStubMock()
+        val future = SettableFuture.create<StringValue>()
+        future.setException(IllegalStateException("bad future"))
+
+        val credentials: CallCredentials = mock()
+        val interceptor: ClientInterceptor = mock()
+
+        val call = GrpcClientStub(
+            stub, ClientCallOptions(
+                credentials = credentials,
+                interceptors = listOf(interceptor),
+                initialRequests = listOf("junk")
+            )
+        )
+        val result = call.executeFuture { arg ->
+            assertThat(arg).isEqualTo(stub)
+            future
+        }
+
+        try {
+            result.get()
+        } catch (ex: Exception) {
+            assertThat(ex).isInstanceOf(ExecutionException::class.java)
+            throw ex.cause!!
+        }
     }
 
     @Test
@@ -622,6 +662,32 @@ class GrpcClientStubTest {
         verify(inStream).onCompleted()
     }
 
+    @Test
+    fun `Can send initial requests to a streaming call`() {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions(
+            initialRequests = listOf(Int32Value(9), Int32Value(99))
+        ))
+        val method = { _: StreamObserver<StringValue> -> inStream }
+
+        val result = call.executeStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            method
+        }
+        result.start()
+
+        result.requests.send(Int32Value(0))
+        result.requests.close()
+
+        verify(inStream).onNext(Int32Value(9))
+        verify(inStream).onNext(Int32Value(99))
+        verify(inStream).onNext(Int32Value(0))
+        verify(inStream).onCompleted()
+    }
+
     @Test(expected = kotlin.UninitializedPropertyAccessException::class)
     fun `Throws when a streaming call is not started`() {
         val stub: TestStub = createTestStubMock()
@@ -790,6 +856,32 @@ class GrpcClientStubTest {
 
         verify(inStream).onNext(Int32Value(5))
         verify(inStream).onNext(Int32Value(55))
+        verify(inStream).onCompleted()
+    }
+
+    @Test
+    fun `Can send initial requests to a client streaming call`() {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions(
+            initialRequests = listOf(Int32Value(1), Int32Value(2))
+        ))
+        val method = { _: StreamObserver<StringValue> -> inStream }
+
+        val result = call.executeClientStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            method
+        }
+        result.start()
+
+        result.requests.send(Int32Value(100))
+        result.requests.close()
+
+        verify(inStream).onNext(Int32Value(1))
+        verify(inStream).onNext(Int32Value(2))
+        verify(inStream).onNext(Int32Value(100))
         verify(inStream).onCompleted()
     }
 
