@@ -32,19 +32,20 @@ import com.google.kgax.grpc.StubFactory
  *
  * This is the same as [FutureActivity], but shows the use of a blocking stub
  * rather than a future based stub (futures are generally recommended).
- *
- * @author jbolinger
  */
 class MainActivity : AppCompatActivity() {
 
     private val factory = StubFactory(
-            LanguageServiceGrpc.LanguageServiceBlockingStub::class,
-            "language.googleapis.com")
+        LanguageServiceGrpc.LanguageServiceBlockingStub::class,
+        "language.googleapis.com"
+    )
 
     private val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
-            factory.fromServiceAccount(it,
-                    listOf("https://www.googleapis.com/auth/cloud-platform"))
+            factory.fromServiceAccount(
+                it,
+                listOf("https://www.googleapis.com/auth/cloud-platform")
+            )
         }
     }
 
@@ -66,17 +67,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private class ApiTestTask(
-            val stub: GrpcClientStub<LanguageServiceGrpc.LanguageServiceBlockingStub>,
-            val onResult: (String) -> Unit
+        val stub: GrpcClientStub<LanguageServiceGrpc.LanguageServiceBlockingStub>,
+        val onResult: (String) -> Unit
     ) : AsyncTask<Unit, Unit, AnalyzeEntitiesResponse>() {
         override fun doInBackground(vararg params: Unit): AnalyzeEntitiesResponse {
-            val response = stub.executeBlocking { it ->
-                it.analyzeEntities(AnalyzeEntitiesRequest.newBuilder()
-                        .setDocument(Document.newBuilder()
+            val response = stub.executeBlocking {
+                it.analyzeEntities(
+                    AnalyzeEntitiesRequest.newBuilder()
+                        .setDocument(
+                            Document.newBuilder()
                                 .setContent("Hi there Joe")
                                 .setType(Document.Type.PLAIN_TEXT)
-                                .build())
-                        .build())
+                                .build()
+                        )
+                        .build()
+                )
             }
             return response.body
         }

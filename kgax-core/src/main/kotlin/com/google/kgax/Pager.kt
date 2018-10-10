@@ -17,6 +17,7 @@
 package com.google.kgax
 
 import java.util.concurrent.Executor
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
@@ -94,7 +95,7 @@ class Pager<ReqT, RespT, ElementT> internal constructor(
 
     companion object {
         /** The executor to use for fetching pages via the [onPage] method. */
-        var executor = Executors.newCachedThreadPool()
+        var executor: ExecutorService = Executors.newCachedThreadPool()
     }
 }
 

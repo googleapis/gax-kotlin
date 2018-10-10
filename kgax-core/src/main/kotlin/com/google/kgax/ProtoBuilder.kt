@@ -16,6 +16,7 @@
 
 package com.google.kgax
 
+/** Marks a Kotlin DSL style helper for a protobuf builder type. */
 @DslMarker
 @Target(AnnotationTarget.CLASS, AnnotationTarget.TYPE)
 annotation class ProtoBuilder

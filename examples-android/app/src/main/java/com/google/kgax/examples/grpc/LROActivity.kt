@@ -35,18 +35,19 @@ private const val TAG = "APITest"
 
 /**
  * Kotlin example showcasing LRO using KGax with gRPC.
- *
- * @author jbolinger
  */
 class LROActivity : AppCompatActivity() {
 
     private val factory = StubFactory(
-            SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com")
+        SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com"
+    )
 
     private val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
-            factory.fromServiceAccount(it,
-                    listOf("https://www.googleapis.com/auth/cloud-platform"))
+            factory.fromServiceAccount(
+                it,
+                listOf("https://www.googleapis.com/auth/cloud-platform")
+            )
         }
     }
 
@@ -73,24 +74,31 @@ class LROActivity : AppCompatActivity() {
     }
 
     private class ApiTestTask(
-            val stub: GrpcClientStub<SpeechGrpc.SpeechFutureStub>,
-            val audio: ByteString,
-            val onResult: (String) -> Unit
+        val stub: GrpcClientStub<SpeechGrpc.SpeechFutureStub>,
+        val audio: ByteString,
+        val onResult: (String) -> Unit
     ) : AsyncTask<Unit, Unit, LongRunningRecognizeResponse>() {
-        override fun doInBackground(vararg params: Unit) : LongRunningRecognizeResponse {
+        override fun doInBackground(vararg params: Unit): LongRunningRecognizeResponse {
             // execute a long running operation
-            val lro = stub.executeLongRunning(LongRunningRecognizeResponse::class.java) {
-                it.longRunningRecognize(LongRunningRecognizeRequest.newBuilder()
-                        .setAudio(RecognitionAudio.newBuilder()
-                                .setContent(audio)
-                                .build())
-                        .setConfig(RecognitionConfig.newBuilder()
-                                .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
-                                .setSampleRateHertz(16000)
-                                .setLanguageCode("en-US")
-                                .build())
-                        .build())
-            }
+            val lro = stub
+                .executeLongRunning(LongRunningRecognizeResponse::class.java) {
+                    it.longRunningRecognize(
+                        LongRunningRecognizeRequest.newBuilder()
+                            .setAudio(
+                                RecognitionAudio.newBuilder()
+                                    .setContent(audio)
+                                    .build()
+                            )
+                            .setConfig(
+                                RecognitionConfig.newBuilder()
+                                    .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
+                                    .setSampleRateHertz(16000)
+                                    .setLanguageCode("en-US")
+                                    .build()
+                            )
+                            .build()
+                    )
+                }
 
             // wait for the response to complete
             Log.i(TAG, "Waiting for long running operation...")

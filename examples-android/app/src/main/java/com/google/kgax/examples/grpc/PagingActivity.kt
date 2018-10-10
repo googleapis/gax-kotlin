@@ -41,16 +41,21 @@ import java.util.Date
 class PagingActivity : AppCompatActivity() {
 
     private val factory = StubFactory(
-            LoggingServiceV2Grpc.LoggingServiceV2BlockingStub::class,
-            "logging.googleapis.com")
+        LoggingServiceV2Grpc.LoggingServiceV2BlockingStub::class,
+        "logging.googleapis.com"
+    )
 
     private val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
-            factory.fromServiceAccount(it,
-                    listOf("https://www.googleapis.com/auth/logging.write",
-                            "https://www.googleapis.com/auth/logging.admin",
-                            "https://www.googleapis.com/auth/logging.read",
-                            "https://www.googleapis.com/auth/cloud-platform"))
+            factory.fromServiceAccount(
+                it,
+                listOf(
+                    "https://www.googleapis.com/auth/logging.write",
+                    "https://www.googleapis.com/auth/logging.admin",
+                    "https://www.googleapis.com/auth/logging.read",
+                    "https://www.googleapis.com/auth/cloud-platform"
+                )
+            )
         }
     }
 
@@ -78,9 +83,9 @@ class PagingActivity : AppCompatActivity() {
     }
 
     private class ApiTestTask(
-            val stub: GrpcClientStub<LoggingServiceV2Grpc.LoggingServiceV2BlockingStub>,
-            val projectId: String,
-            val onResult: (String) -> Unit
+        val stub: GrpcClientStub<LoggingServiceV2Grpc.LoggingServiceV2BlockingStub>,
+        val projectId: String,
+        val onResult: (String) -> Unit
     ) : AsyncTask<Unit, Unit, String>() {
         override fun doInBackground(vararg params: Unit): String {
             val output = StringBuffer("\n")
@@ -92,11 +97,13 @@ class PagingActivity : AppCompatActivity() {
             // ensure we have some logs to read
             val writeRequest = WriteLogEntriesRequest.newBuilder()
             for (i in 1..40) {
-                writeRequest.addEntries(LogEntry.newBuilder()
+                writeRequest.addEntries(
+                    LogEntry.newBuilder()
                         .setResource(MonitoredResource.newBuilder().setType("global").build())
                         .setLogName(log)
                         .setTextPayload("log number: $i")
-                        .build())
+                        .build()
+                )
             }
             stub.executeBlocking { it.writeLogEntries(writeRequest.build()) }
 
@@ -107,10 +114,10 @@ class PagingActivity : AppCompatActivity() {
                 }
                 initialRequest = {
                     ListLogEntriesRequest.newBuilder()
-                            .addResourceNames(project)
-                            .setFilter("logName=$log")
-                            .setPageSize(10)
-                            .build()
+                        .addResourceNames(project)
+                        .setFilter("logName=$log")
+                        .setPageSize(10)
+                        .build()
                 }
                 nextRequest = { request, token ->
                     request.toBuilder().setPageToken(token).build()
@@ -137,6 +144,8 @@ class PagingActivity : AppCompatActivity() {
     }
 }
 
-private data class LogEntryPage(override val elements: Iterable<LogEntry>,
-                                override val token: String?,
-                                override val metadata: Unit? = null) : Page<LogEntry>
+private data class LogEntryPage(
+    override val elements: Iterable<LogEntry>,
+    override val token: String?,
+    override val metadata: Unit? = null
+) : Page<LogEntry>

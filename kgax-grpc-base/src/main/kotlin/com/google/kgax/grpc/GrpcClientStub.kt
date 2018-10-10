@@ -22,7 +22,10 @@ import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
+import com.google.kgax.NoRetry
 import com.google.kgax.Page
+import com.google.kgax.Retry
+import com.google.kgax.RetryContext
 import com.google.longrunning.Operation
 import com.google.longrunning.OperationsGrpc
 import com.google.protobuf.MessageLite
@@ -33,10 +36,15 @@ import io.grpc.stub.AbstractStub
 import io.grpc.stub.MetadataUtils
 import io.grpc.stub.StreamObserver
 import java.io.InputStream
+import java.util.Timer
+import java.util.TimerTask
 import java.util.concurrent.Executor
 
 @DslMarker
 annotation class DecoratorMarker
+
+// timer used for retries
+private val RETRY_TIMER = Timer()
 
 /**
  * A convenience wrapper for gRPC stubs that enables ease of use and the
@@ -94,10 +102,28 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * first parameter. The result along with any additional information, such as
      * [ResponseMetadata], will be returned.
      */
-    fun <RespT : MessageLite> executeBlocking(method: (T) -> RespT): CallResult<RespT> {
-        val stub = stubWithContext()
-        val response = method(stub)
-        return CallResult(response, stub.context.responseMetadata)
+    fun <RespT : MessageLite> executeBlocking(method: (T) -> RespT) = executeBlocking(method, RetryContext())
+
+    private fun <RespT : MessageLite> executeBlocking(
+        method: (T) -> RespT,
+        retryContext: RetryContext
+    ): CallResult<RespT> {
+        try {
+            val stub = stubWithContext()
+            val response = method(stub)
+            return CallResult(response, stub.context.responseMetadata)
+        } catch (t: Throwable) {
+            val retryAfter = options.retry.retryAfter(t, retryContext)
+            if (retryAfter != null) {
+                try {
+                    Thread.sleep(retryAfter)
+                } catch (int: InterruptedException) { /* ignore */
+                }
+                return executeBlocking(method, retryContext.next())
+            } else {
+                throw t
+            }
+        }
     }
 
     /**
@@ -122,13 +148,9 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     fun <RespT : MessageLite> executeFuture(
         method: (T) -> ListenableFuture<RespT>
     ): ListenableFuture<CallResult<RespT>> {
-        val stub = stubWithContext()
-        return Futures.transform(method(stub)) {
-            CallResult(
-                it ?: throw IllegalStateException("Future returned null value"),
-                stub.context.responseMetadata
-            )
-        }
+        val future: SettableFuture<CallResult<RespT>> = SettableFuture.create()
+        executeFuture(method, future, RetryContext())
+        return future
     }
 
     /**
@@ -150,31 +172,57 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         type: Class<RespT>,
         method: (T) -> ListenableFuture<Operation>
     ): LongRunningCall<RespT> {
-        val stub = stubWithContext()
-        val operationsStub = GrpcClientStub(OperationsGrpc.newFutureStub(stub.channel), options)
-        val future = Futures.transform(method(stub)) {
-            CallResult(
-                it ?: throw IllegalStateException("Future returned null value"),
-                stub.context.responseMetadata
-            )
-        }
+        val operationsStub = GrpcClientStub(OperationsGrpc.newFutureStub(stubWithContext().channel), options)
+        val future: SettableFuture<CallResult<Operation>> = SettableFuture.create()
+        executeFuture(method, future, RetryContext())
         return LongRunningCall(operationsStub, future, type)
+    }
+
+    private fun <RespT : MessageLite> executeFuture(
+        method: (T) -> ListenableFuture<RespT>,
+        resultFuture: SettableFuture<CallResult<RespT>>,
+        retryContext: RetryContext
+    ) {
+        val stub = stubWithContext()
+
+        Futures.addCallback(method(stub), object : FutureCallback<RespT> {
+            override fun onSuccess(result: RespT?) {
+                if (result != null) {
+                    resultFuture.set(CallResult(result, stub.context.responseMetadata))
+                } else {
+                    resultFuture.setException(IllegalStateException("Future returned null value"))
+                }
+            }
+
+            override fun onFailure(t: Throwable) {
+                val retryAfter = options.retry.retryAfter(t, retryContext)
+                if (retryAfter != null) {
+                    RETRY_TIMER.schedule(object : TimerTask() {
+                        override fun run() = executeFuture(method, resultFuture, retryContext.next())
+                    }, retryAfter)
+                } else {
+                    resultFuture.setException(t)
+                }
+            }
+        })
     }
 
     /**
      * Execute a bidirectional streaming call. For example:
      *
      * ```
-     * val streams = stub.prepare().executeStreaming { it::myStreamingMethod }
+     * val stream = stub.prepare().executeStreaming { it::myStreamingMethod }
      *
-     *  // process incoming responses
-     *  streams.responses.onNext = { print("response: $it") }
-     *  streams.responses.onError = { print("error: $it") }
-     *  streams.responses.onCompleted = { print("all done!") }
+     * // process incoming responses
+     * stream.start {
+     *     onNext = { print("response: $it") }
+     *     onError = { print("error: $it") }
+     *     onCompleted = { print("all done!") }
+     * }
      *
-     *  // send outbound requests
-     *  stream.requests.send(...)
-     *  stream.requests.send(...)
+     * // send outbound requests
+     * stream.requests.send(...)
+     * stream.requests.send(...)
      * ```
      *
      * The [method] lambda should return a bound method reference on the stub that is provided
@@ -189,33 +237,25 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): StreamingCall<ReqT, RespT> {
-        val stub = stubWithContext()
-
         // starts the call
-        val doStart = { responseStream: ResponseStreamImpl<RespT> ->
+        val doStart = { self: StreamingCallImpl<ReqT, RespT>, retryContext: RetryContext ->
+            val stub = stubWithContext()
+
+            // handle responses
+            val responseStream = object : ResponseStreamImpl<RespT>() {
+                override fun close() {
+                    stub.context.call.cancel(
+                        "explicit close() called by client",
+                        StreamingMethodClosedException()
+                    )
+                }
+            }
+
             // handle requests
-            val requestObserver = method(stub)(object : StreamObserver<RespT> {
-                override fun onNext(value: RespT) {
-                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreNextIf(value))) {
-                        responseStream.executor?.execute { responseStream.onNext(value) }
-                            ?: responseStream.onNext(value)
-                    }
-                }
-
-                override fun onError(t: Throwable) {
-                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreErrorIf(t))) {
-                        responseStream.executor?.execute { responseStream.onError(t) }
-                            ?: responseStream.onError(t)
-                    }
-                }
-
-                override fun onCompleted() {
-                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreCompletedIf())) {
-                        responseStream.executor?.execute { responseStream.onCompleted() }
-                            ?: responseStream.onCompleted()
-                    }
-                }
-            })
+            val responseStreamObserver = createResponseStreamObserver(responseStream, retryContext) {
+                self.restart(it.next())
+            }
+            val requestObserver = method(stub)(responseStreamObserver)
             val requestStream: RequestStream<ReqT> = object : RequestStream<ReqT> {
                 override fun send(request: ReqT) = requestObserver.onNext(request)
                 override fun close() = requestObserver.onCompleted()
@@ -227,34 +267,24 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                 requestStream.send(request as ReqT)
             }
 
-            requestStream
+            Pair(requestStream, responseStream)
         }
 
-        // handle responses
-        val responseStream = object : ResponseStreamImpl<RespT>() {
-            override fun close() {
-                stub.context.call.cancel(
-                    "explicit close() called by client",
-                    StreamingMethodClosedException()
-                )
-            }
-        }
-
-        return StreamingCallImpl(doStart, responseStream)
+        return StreamingCallImpl(doStart)
     }
 
     /**
      * Execute a call that sends a stream of requests to the server. For example:
      *
      * ```
-     * val streams = stub.prepare().executeClientStreaming { it::myStreamingMethod }
+     * val stream = stub.prepare().executeClientStreaming { it::myStreamingMethod }
      *
-     *  // process the response once available
-     *  streams.response.get { print("response: $it") }
+     * // send outbound requests
+     * stream.requests.send(...)
+     * stream.requests.send(...)
      *
-     *  // send outbound requests
-     *  stream.requests.send(...)
-     *  stream.requests.send(...)
+     * // process the response once available
+     * stream.response.get { print("response: $it") }
      * ```
      *
      * The [method] lambda should return a bound method reference on the stub that is provided
@@ -266,17 +296,30 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     fun <ReqT : MessageLite, RespT : MessageLite> executeClientStreaming(
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): ClientStreamingCall<ReqT, RespT> {
-        val stub = stubWithContext()
-
         // starts the call
-        val doStart = { responseFuture: SettableFuture<RespT> ->
+        val doStart = { self: ClientStreamingCallImpl<ReqT, RespT>, retryContext: RetryContext ->
+            val stub = stubWithContext()
+            var canRetry = true
+
             val requestObserver = method(stub)(object : StreamObserver<RespT> {
                 override fun onNext(value: RespT) {
-                    responseFuture.set(value)
+                    canRetry = false
+                    self.response.set(value)
                 }
 
                 override fun onError(t: Throwable) {
-                    responseFuture.setException(t)
+                    try {
+                        val retryAfter = if (canRetry) options.retry.retryAfter(t, retryContext) else null
+                        if (retryAfter != null) {
+                            RETRY_TIMER.schedule(object : TimerTask() {
+                                override fun run() = self.restart(retryContext.next())
+                            }, retryAfter)
+                        } else {
+                            self.response.setException(t)
+                        }
+                    } finally {
+                        canRetry = false
+                    }
                 }
 
                 override fun onCompleted() = Unit
@@ -295,7 +338,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             requestStream
         }
 
-        return ClientStreamingCallImpl(doStart, SettableFuture.create<RespT>())
+        return ClientStreamingCallImpl(doStart)
     }
 
     /**
@@ -303,14 +346,16 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      *
      * ```
      * val request = MyRequest(...)
-     * val streams = stub.prepare().executeServerStreaming { it, observer ->
+     * val stream = stub.prepare().executeServerStreaming { it, observer ->
      *   it.myStreamingMethod(request, observer)
      * }
      *
-     *  // process incoming responses
-     *  streams.responses.onNext = { print("response: $it") }
-     *  streams.responses.onError = { print("error: $it") }
-     *  streams.responses.onCompleted = { print("all done!") }
+     * // process incoming responses
+     * stream.start {
+     *     onNext = { print("response: $it") }
+     *     onError = { print("error: $it") }
+     *     onCompleted = { print("all done!") }
+     * }
      * ```
      *
      * The [method] lambda should call a streaming method reference on the stub that is provided
@@ -324,44 +369,78 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     fun <RespT : MessageLite> executeServerStreaming(
         method: (T, StreamObserver<RespT>) -> Unit
     ): ServerStreamingCall<RespT> {
-        val stub = stubWithContext()
-
         // starts the call
-        val doStart = { responseStream: ResponseStreamImpl<RespT> ->
-            method(stub, object : StreamObserver<RespT> {
-                override fun onNext(value: RespT) {
-                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreNextIf(value))) {
-                        responseStream.executor?.execute { responseStream.onNext(value) }
-                            ?: responseStream.onNext(value)
-                    }
-                }
+        val doStart = { self: ServerStreamingCallImpl<RespT>, retryContext: RetryContext ->
+            val stub = stubWithContext()
 
-                override fun onError(t: Throwable) {
-                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreErrorIf(t))) {
-                        responseStream.executor?.execute { responseStream.onError(t) }
-                            ?: responseStream.onError(t)
-                    }
+            // handle responses
+            val responseStream = object : ResponseStreamImpl<RespT>() {
+                override fun close() {
+                    stub.context.call.cancel(
+                        "explicit close() called by client",
+                        StreamingMethodClosedException()
+                    )
                 }
+            }
 
-                override fun onCompleted() {
-                    if (!ignore(responseStream.ignoreIf(), responseStream.ignoreCompletedIf())) {
-                        responseStream.executor?.execute { responseStream.onCompleted() }
-                            ?: responseStream.onCompleted()
-                    }
-                }
-            })
+            // make request
+            val responseStreamObserver = createResponseStreamObserver(responseStream, retryContext) {
+                self.restart(it.next())
+            }
+            method(stub, responseStreamObserver)
+
+            responseStream
         }
 
-        val responseStream = object : ResponseStreamImpl<RespT>() {
-            override fun close() {
-                stub.context.call.cancel(
-                    "explicit close() called by client",
-                    StreamingMethodClosedException()
-                )
+        return ServerStreamingCallImpl(doStart)
+    }
+
+    // helper for handling streaming responses from the server
+    private fun <RespT : MessageLite> createResponseStreamObserver(
+        responseStream: ResponseStreamImpl<RespT>,
+        retryContext: RetryContext,
+        restart: (retryContext: RetryContext) -> Unit
+    ): StreamObserver<RespT> {
+        return object : StreamObserver<RespT> {
+            var canRetry = true
+
+            override fun onNext(value: RespT) {
+                canRetry = false
+                if (!ignore(responseStream.ignoreIf(), responseStream.ignoreNextIf(value))) {
+                    responseStream.executor?.execute { responseStream.onNext(value) }
+                        ?: responseStream.onNext(value)
+                }
+            }
+
+            override fun onError(t: Throwable) {
+                try {
+                    if (canRetry) {
+                        val retryAfter = options.retry.retryAfter(t, retryContext)
+                        if (retryAfter != null) {
+                            RETRY_TIMER.schedule(object : TimerTask() {
+                                override fun run() = restart(retryContext)
+                            }, retryAfter)
+                            return
+                        }
+                    }
+                } finally {
+                    canRetry = false
+                }
+
+                if (!ignore(responseStream.ignoreIf(), responseStream.ignoreErrorIf(t))) {
+                    responseStream.executor?.execute { responseStream.onError(t) }
+                        ?: responseStream.onError(t)
+                }
+            }
+
+            override fun onCompleted() {
+                canRetry = false
+                if (!ignore(responseStream.ignoreIf(), responseStream.ignoreCompletedIf())) {
+                    responseStream.executor?.execute { responseStream.onCompleted() }
+                        ?: responseStream.onCompleted()
+                }
             }
         }
-
-        return ServerStreamingCallImpl(doStart, responseStream)
     }
 
     /**
@@ -423,12 +502,16 @@ class ClientCallOptions constructor(
     val credentials: CallCredentials? = null,
     val requestMetadata: Map<String, List<String>> = mapOf(),
     val initialRequests: List<Any> = listOf(),
-    val interceptors: List<ClientInterceptor> = listOf()
+    val interceptors: List<ClientInterceptor> = listOf(),
+    val retry: Retry = NoRetry
 ) {
 
     constructor(builder: Builder) : this(
-        builder.credentials, builder.requestMetadata,
-        builder.initialStreamRequests, builder.interceptors
+        builder.credentials,
+        builder.requestMetadata,
+        builder.initialStreamRequests,
+        builder.interceptors,
+        builder.retry
     )
 
     @DecoratorMarker
@@ -436,14 +519,16 @@ class ClientCallOptions constructor(
         internal var credentials: CallCredentials? = null,
         internal val requestMetadata: MutableMap<String, List<String>> = mutableMapOf(),
         internal val initialStreamRequests: MutableList<Any> = mutableListOf(),
-        internal val interceptors: MutableList<ClientInterceptor> = mutableListOf()
+        internal val interceptors: MutableList<ClientInterceptor> = mutableListOf(),
+        internal var retry: Retry = NoRetry
     ) {
 
         constructor(opts: ClientCallOptions) : this(
             opts.credentials,
             opts.requestMetadata.toMutableMap(),
             opts.initialRequests.toMutableList(),
-            opts.interceptors.toMutableList()
+            opts.interceptors.toMutableList(),
+            opts.retry
         )
 
         /** Set service account credentials for authentication */
@@ -487,6 +572,11 @@ class ClientCallOptions constructor(
         /** Append arbitrary interceptors (for advanced use) */
         fun withInterceptor(interceptor: ClientInterceptor) {
             interceptors.add(interceptor)
+        }
+
+        /** Use the given [retry] settings */
+        fun withRetry(retry: Retry) {
+            this.retry = retry
         }
 
         fun build() = ClientCallOptions(this)
@@ -565,10 +655,13 @@ internal abstract class ResponseStreamImpl<RespT>(
  * should be called only once.
  */
 interface StreamingCall<ReqT, RespT> {
+    /** The request stream sent to the server */
     val requests: RequestStream<ReqT>
+    /** The responses from the server */
     val responses: ResponseStream<RespT>
 
-    fun start(init: (ResponseStream<RespT>.() -> Unit)? = null)
+    /** Start the request and response streams */
+    fun start(init: (ResponseStream<RespT>.() -> Unit) = {})
 }
 
 /**
@@ -578,9 +671,12 @@ interface StreamingCall<ReqT, RespT> {
  * should be called only once.
  */
 interface ClientStreamingCall<ReqT, RespT> {
+    /** The request stream sent to the server */
     val requests: RequestStream<ReqT>
+    /** The response from the server */
     val response: ListenableFuture<RespT>
 
+    /** Start the requests stream */
     fun start()
 }
 
@@ -591,48 +687,67 @@ interface ClientStreamingCall<ReqT, RespT> {
  * should be called only once.
  */
 interface ServerStreamingCall<RespT> {
+    /** The responses from the server */
     val responses: ResponseStream<RespT>
 
-    fun start(init: (ResponseStream<RespT>.() -> Unit)?)
+    /** Start receiving responses */
+    fun start(init: (ResponseStream<RespT>.() -> Unit) = {})
 }
 
 internal class StreamingCallImpl<ReqT, RespT>(
-    private val start: (ResponseStreamImpl<RespT>) -> RequestStream<ReqT>,
-    private val responseStream: ResponseStreamImpl<RespT>
+    private val begin: (StreamingCallImpl<ReqT, RespT>, RetryContext) -> Pair<RequestStream<ReqT>, ResponseStream<RespT>>
 ) : StreamingCall<ReqT, RespT> {
 
-    override lateinit var requests: RequestStream<ReqT>
-    override var responses: ResponseStream<RespT> = responseStream
+    private var init: (ResponseStream<RespT>.() -> Unit) = {}
 
-    override fun start(init: (ResponseStream<RespT>.() -> Unit)?) {
-        init?.let { responses.apply(it) }
-        requests = start(responseStream)
+    override lateinit var requests: RequestStream<ReqT>
+    override lateinit var responses: ResponseStream<RespT>
+
+    override fun start(init: (ResponseStream<RespT>.() -> Unit)) {
+        this.init = init
+        restart(RetryContext())
+    }
+
+    internal fun restart(retryContext: RetryContext) {
+        val (req, resp) = begin(this, retryContext)
+        requests = req
+        responses = resp
+        responses.apply(init)
     }
 }
 
 internal class ClientStreamingCallImpl<ReqT, RespT>(
-    private val start: (SettableFuture<RespT>) -> RequestStream<ReqT>,
-    private val responseFuture: SettableFuture<RespT>
+    private val begin: (ClientStreamingCallImpl<ReqT, RespT>, RetryContext) -> RequestStream<ReqT>
 ) : ClientStreamingCall<ReqT, RespT> {
 
     override lateinit var requests: RequestStream<ReqT>
-    override var response: ListenableFuture<RespT> = responseFuture
+    override val response: SettableFuture<RespT> = SettableFuture.create()
 
     override fun start() {
-        requests = start(responseFuture)
+        restart(RetryContext())
+    }
+
+    internal fun restart(retryContext: RetryContext) {
+        requests = begin(this, retryContext)
     }
 }
 
 internal class ServerStreamingCallImpl<RespT>(
-    private val start: (ResponseStreamImpl<RespT>) -> Unit,
-    private val responseStream: ResponseStreamImpl<RespT>
+    private val begin: (ServerStreamingCallImpl<RespT>, RetryContext) -> ResponseStreamImpl<RespT>
 ) : ServerStreamingCall<RespT> {
 
-    override var responses: ResponseStream<RespT> = responseStream
+    private var init: (ResponseStream<RespT>.() -> Unit) = {}
 
-    override fun start(init: (ResponseStream<RespT>.() -> Unit)?) {
-        init?.let { responses.apply(it) }
-        start(responseStream)
+    override lateinit var responses: ResponseStream<RespT>
+
+    override fun start(init: (ResponseStream<RespT>.() -> Unit)) {
+        this.init = init
+        restart(RetryContext())
+    }
+
+    internal fun restart(retryContext: RetryContext) {
+        responses = begin(this, retryContext)
+        responses.apply(init)
     }
 }
 
