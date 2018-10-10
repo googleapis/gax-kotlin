@@ -44,7 +44,6 @@ import io.grpc.stub.AbstractStub
 import io.grpc.stub.StreamObserver
 import java.io.ByteArrayInputStream
 import java.io.IOException
-import java.lang.IllegalArgumentException
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executor
 import kotlin.test.BeforeTest
@@ -429,6 +428,121 @@ class GrpcClientStubTest {
     }
 
     @Test
+    fun `Can retry a streaming call`() {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+        val exception: RuntimeException = mock()
+        var timesExecuted = 0
+
+        val retry = object : Retry {
+            var executed = false
+
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                assertThat(error).isEqualTo(exception)
+                assertThat(context.numberOfAttempts).isEqualTo(timesExecuted - 1)
+                executed = true
+                return 100
+            }
+        }
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+
+        var outStream: StreamObserver<StringValue>? = null
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            outStream = outs
+            timesExecuted++
+            return inStream
+        }
+
+        val result = call.executeStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            ::method
+        }
+
+        val responses = mutableListOf<String>()
+        val exceptions = mutableListOf<Throwable>()
+        var complete = false
+
+        result.start {
+            onNext = { responses.add(it.value) }
+            onError = { exceptions.add(it) }
+            onCompleted = { complete = true }
+        }
+
+        // fake output from server
+        outStream?.onError(exception)
+        Thread.sleep(200)
+        outStream?.onError(exception)
+        Thread.sleep(200)
+
+        outStream?.onNext(StringValue("one"))
+        outStream?.onNext(StringValue("two"))
+        outStream?.onCompleted()
+
+        verify(inStream, never()).onCompleted()
+        assertThat(responses).containsExactly("one", "two")
+        assertThat(exceptions).isEmpty()
+        assertThat(complete).isTrue()
+
+        assertThat(timesExecuted).isEqualTo(3)
+        assertThat(retry.executed).isTrue()
+    }
+
+    @Test
+    fun `Does not retry a streaming call that had a result`() {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+        val exception1: RuntimeException = mock()
+        val exception2: RuntimeException = mock()
+
+        val retry = object : Retry {
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                fail("retry not expected")
+            }
+        }
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+
+        var timesExecuted = 0
+        var outStream: StreamObserver<StringValue>? = null
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            outStream = outs
+            timesExecuted++
+            return inStream
+        }
+
+        val result = call.executeStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            ::method
+        }
+
+        val responses = mutableListOf<String>()
+        val exceptions = mutableListOf<Throwable>()
+        var complete = false
+
+        result.start {
+            onNext = { responses.add(it.value) }
+            onError = { exceptions.add(it) }
+            onCompleted = { complete = true }
+        }
+
+        // fake output from server
+        outStream?.onNext(StringValue("result"))
+        outStream?.onError(exception1)
+        outStream?.onError(exception2)
+        outStream?.onCompleted()
+
+        verify(inStream, never()).onCompleted()
+        assertThat(responses).containsExactly("result")
+        assertThat(exceptions).containsExactly(exception1, exception2)
+        assertThat(complete).isTrue()
+
+        assertThat(timesExecuted).isEqualTo(1)
+    }
+
+    @Test
     fun `Can ignore streaming call events`() {
         val stub: TestStub = createTestStubMock()
         val inStream: StreamObserver<Int32Value> = mock()
@@ -567,6 +681,95 @@ class GrpcClientStubTest {
     }
 
     @Test
+    fun `Can retry a client streaming call`() {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+        val exception = RuntimeException("it failed")
+        var timesExecuted = 0
+
+        val retry = object : Retry {
+            var executed = false
+
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                assertThat(error).isEqualTo(exception)
+                assertThat(context.numberOfAttempts).isEqualTo(timesExecuted - 1)
+                executed = true
+                return 100
+            }
+        }
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        var outStream: StreamObserver<StringValue>? = null
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            outStream = outs
+            timesExecuted++
+            return inStream
+        }
+
+        val result = call.executeClientStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            ::method
+        }
+
+        result.start()
+        result.requests.send(Int32Value(1))
+        result.requests.send(Int32Value(2))
+
+        // fake output from server
+        outStream?.onError(exception)
+        Thread.sleep(200)
+        outStream?.onNext(StringValue("xyz"))
+        outStream?.onCompleted()
+
+        verify(inStream).onNext(Int32Value(1))
+        verify(inStream).onNext(Int32Value(2))
+        assertThat(result.response.get().value).isEqualTo("xyz")
+
+        assertThat(retry.executed).isTrue()
+        assertThat(timesExecuted).isEqualTo(2)
+    }
+
+    @Test
+    fun `Does not retry a client streaming call after result`() {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+
+        val retry = object : Retry {
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                fail("retry not expected")
+            }
+        }
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        var outStream: StreamObserver<StringValue>? = null
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            outStream = outs
+            return inStream
+        }
+
+        val result = call.executeClientStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            ::method
+        }
+
+        result.start()
+        result.requests.send(Int32Value(1))
+        result.requests.send(Int32Value(2))
+
+        // fake output from server
+        outStream?.onNext(StringValue("xyz"))
+        outStream?.onError(RuntimeException("it failed"))
+        Thread.sleep(200)
+        outStream?.onCompleted()
+
+        verify(inStream).onNext(Int32Value(1))
+        verify(inStream).onNext(Int32Value(2))
+        assertThat(result.response.get().value).isEqualTo("xyz")
+    }
+
+    @Test
     fun `Can close a client call request stream`() {
         val stub: TestStub = createTestStubMock()
         val inStream: StreamObserver<Int32Value> = mock()
@@ -662,6 +865,104 @@ class GrpcClientStubTest {
     }
 
     @Test
+    fun `Can retry a server streaming call`() {
+        val stub: TestStub = createTestStubMock()
+        val exception: RuntimeException = mock()
+        var timesExecuted = 0
+
+        val retry = object : Retry {
+            var executed = false
+
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                assertThat(context.numberOfAttempts).isEqualTo(timesExecuted - 1)
+                executed = true
+                return 100
+            }
+        }
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        var outStream: StreamObserver<StringValue>? = null
+        val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
+            assertThat(it).isEqualTo(stub)
+            timesExecuted++
+            outStream = observer
+        }
+
+        val responses = mutableListOf<String>()
+        val exceptions = mutableListOf<Throwable>()
+        var complete = false
+
+        result.start {
+            onNext = { responses.add(it.value) }
+            onError = { exceptions.add(it) }
+            onCompleted = { complete = true }
+        }
+
+        outStream?.onError(RuntimeException())
+        Thread.sleep(200)
+        outStream?.onError(RuntimeException())
+        Thread.sleep(200)
+
+        // fake output from server
+        outStream?.onNext(StringValue("one"))
+        outStream?.onNext(StringValue("two"))
+        outStream?.onError(exception)
+        outStream?.onCompleted()
+
+        assertThat(responses).containsExactly("one", "two")
+        assertThat(exceptions).containsExactly(exception)
+        assertThat(complete).isTrue()
+
+        assertThat(timesExecuted).isEqualTo(3)
+        assertThat(retry.executed).isTrue()
+    }
+
+    @Test
+    fun `Does not retry a server streaming call after a result`() {
+        val stub: TestStub = createTestStubMock()
+        val exception: RuntimeException = mock()
+        var timesExecuted = 0
+
+        val retry = object : Retry {
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                fail("retry not expected")
+            }
+        }
+
+        // capture output stream
+        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        var outStream: StreamObserver<StringValue>? = null
+        val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
+            assertThat(it).isEqualTo(stub)
+            timesExecuted++
+            outStream = observer
+        }
+
+        val responses = mutableListOf<String>()
+        val exceptions = mutableListOf<Throwable>()
+        var complete = false
+
+        result.start {
+            onNext = { responses.add(it.value) }
+            onError = { exceptions.add(it) }
+            onCompleted = { complete = true }
+        }
+
+        // fake output from server
+        outStream?.onNext(StringValue("one"))
+        outStream?.onNext(StringValue("two"))
+        outStream?.onError(exception)
+        outStream?.onCompleted()
+
+        assertThat(responses).containsExactly("one", "two")
+        assertThat(exceptions).containsExactly(exception)
+        assertThat(complete).isTrue()
+
+        assertThat(timesExecuted).isEqualTo(1)
+    }
+
+    @Test
     fun `Can ignore server streaming call events`() {
         val stub: TestStub = createTestStubMock()
 
@@ -711,8 +1012,8 @@ class GrpcClientStubTest {
         }
     }
 
-    @Test
-    fun `Has no responses when a server streaming call is not started`() {
+    @Test(expected = UninitializedPropertyAccessException::class)
+    fun `Throws when a server streaming call is not started`() {
         val stub: TestStub = createTestStubMock()
         val exception: RuntimeException = mock()
 
@@ -732,16 +1033,6 @@ class GrpcClientStubTest {
         result.responses.onNext = { responses.add(it.value) }
         result.responses.onError = { exceptions.add(it) }
         result.responses.onCompleted = { complete = true }
-
-        // fake output from server
-        outStream?.onNext(StringValue("one"))
-        outStream?.onNext(StringValue("two"))
-        outStream?.onError(exception)
-        outStream?.onCompleted()
-
-        assertThat(responses).isEmpty()
-        assertThat(exceptions).isEmpty()
-        assertThat(complete).isFalse()
     }
 
     @Test
