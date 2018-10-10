@@ -784,8 +784,8 @@ fun <T> FutureCall<T>.on(executor: Executor, callback: Callback<T>.() -> Unit) {
             }
         }
 
-        override fun onFailure(t: Throwable?) {
-            if (!ignore(cb.ignoreIf(), cb.ignoreErrorIf(t!!))) {
+        override fun onFailure(t: Throwable) {
+            if (!ignore(cb.ignoreIf(), cb.ignoreErrorIf(t))) {
                 cb.error(t)
             }
         }
