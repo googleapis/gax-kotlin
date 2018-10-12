@@ -20,6 +20,7 @@ import com.google.common.truth.Truth.assertThat
 import com.google.kgax.RetryContext
 import io.grpc.Status
 import io.grpc.StatusRuntimeException
+import java.lang.RuntimeException
 import kotlin.test.Test
 
 class GrpcRetryTest {
@@ -84,5 +85,16 @@ class GrpcRetryTest {
         for (i in 20..100) {
             assertThat(retry.retryAfter(errorAborted, RetryContext("one", numberOfAttempts = i))).isNull()
         }
+    }
+
+    @Test
+    fun `Ignores other exceptions`() {
+        val retry = GrpcBasicRetry(
+            mapOf(
+                "one" to setOf(Status.Code.ABORTED, Status.Code.DATA_LOSS)
+            )
+        )
+
+        assertThat(retry.retryAfter(RuntimeException(), RetryContext(""))).isNull()
     }
 }
