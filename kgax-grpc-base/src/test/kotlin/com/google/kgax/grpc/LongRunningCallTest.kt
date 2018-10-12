@@ -121,7 +121,7 @@ class LongRunningCallTest {
         val operation = Operation.newBuilder().setDone(true).build()
         operationFuture.set(CallResult(operation, ResponseMetadata()))
         val grpcClient: GrpcClientStub<OperationsGrpc.OperationsFutureStub> = mock {
-            on { executeFuture<Operation>(any()) }
+            on { executeFuture<Operation>(any(), any()) }
                 .thenReturn(operationFuture)
         }
 
@@ -138,7 +138,7 @@ class LongRunningCallTest {
         val operation = Operation.newBuilder().setDone(true).build()
         operationFuture.set(CallResult(operation, ResponseMetadata()))
         val grpcClient: GrpcClientStub<OperationsGrpc.OperationsFutureStub> = mock {
-            on { executeFuture<Operation>(any()) }
+            on { executeFuture<Operation>(any(), any()) }
                 .thenReturn(operationFuture)
         }
 
