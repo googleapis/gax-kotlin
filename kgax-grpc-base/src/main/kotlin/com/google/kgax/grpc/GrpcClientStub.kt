@@ -101,8 +101,11 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * The [method] lambda should perform a blocking method call on the stub given as the
      * first parameter. The result along with any additional information, such as
      * [ResponseMetadata], will be returned.
+     *
+     * An optional [context] can be supplied to enable arbitrary retry strategies.
      */
-    fun <RespT : MessageLite> executeBlocking(method: (T) -> RespT) = executeBlocking(method, RetryContext())
+    fun <RespT : MessageLite> executeBlocking(context: String = "", method: (T) -> RespT) =
+        executeBlocking(method, RetryContext(context))
 
     private fun <RespT : MessageLite> executeBlocking(
         method: (T) -> RespT,
@@ -145,12 +148,15 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      *
      * Use [ListenableFuture.get] to block for the result or [ListenableFuture.addListener]
      * to access the result asynchronously.
+     *
+     * An optional [context] can be supplied to enable arbitrary retry strategies.
      */
     fun <RespT : MessageLite> executeFuture(
+        context: String = "",
         method: (T) -> ListenableFuture<RespT>
     ): ListenableFuture<CallResult<RespT>> {
         val future: SettableFuture<CallResult<RespT>> = SettableFuture.create()
-        executeFuture(method, future, RetryContext())
+        executeFuture(method, future, RetryContext(context))
         return future
     }
 
@@ -168,14 +174,17 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * first parameter. The result along with any additional information, such as
      * [ResponseMetadata], will be returned as a [LongRunningCall]. The [type] given
      * must match the return type of the Operation.
+     *
+     * An optional [context] can be supplied to enable arbitrary retry strategies.
      */
     fun <RespT : MessageLite> executeLongRunning(
         type: Class<RespT>,
+        context: String = "",
         method: (T) -> ListenableFuture<Operation>
     ): LongRunningCall<RespT> {
         val operationsStub = GrpcClientStub(OperationsGrpc.newFutureStub(stubWithContext().channel), options)
         val future: SettableFuture<CallResult<Operation>> = SettableFuture.create()
-        executeFuture(method, future, RetryContext())
+        executeFuture(method, future, RetryContext(context))
         return LongRunningCall(operationsStub, future, type)
     }
 
@@ -234,8 +243,11 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * Callbacks attached to the returned stream will be invoked on their original
      * background executor. Set the optional [ResponseStream.executor] parameter as needed
      * (i.e. to have them executed on the main thread, etc.)
+     *
+     * An optional [context] can be supplied to enable arbitrary retry strategies.
      */
     fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
+        context: String = "",
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): StreamingCall<ReqT, RespT> {
         // starts the call
@@ -271,7 +283,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             Pair(requestStream, responseStream)
         }
 
-        return StreamingCallImpl(doStart)
+        return StreamingCallImpl(context, doStart)
     }
 
     /**
@@ -293,8 +305,11 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * the stub method directly. It will be done as part of this call. The result of this method
      * will provide an outbound stream for requests to be sent to the server and a future for
      * the server's response.
+     *
+     * An optional [context] can be supplied to enable arbitrary retry strategies.
      */
     fun <ReqT : MessageLite, RespT : MessageLite> executeClientStreaming(
+        context: String = "",
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): ClientStreamingCall<ReqT, RespT> {
         // starts the call
@@ -339,7 +354,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             requestStream
         }
 
-        return ClientStreamingCallImpl(doStart)
+        return ClientStreamingCallImpl(context, doStart)
     }
 
     /**
@@ -366,8 +381,11 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * Callbacks attached to the returned stream will be invoked on their original
      * background executor. Set the optional [ResponseStream.executor] parameter as needed
      * (i.e. to have them executed on the main thread, etc.)
+     *
+     * An optional [context] can be supplied to enable arbitrary retry strategies.
      */
     fun <RespT : MessageLite> executeServerStreaming(
+        context: String = "",
         method: (T, StreamObserver<RespT>) -> Unit
     ): ServerStreamingCall<RespT> {
         // starts the call
@@ -393,7 +411,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             responseStream
         }
 
-        return ServerStreamingCallImpl(doStart)
+        return ServerStreamingCallImpl(context, doStart)
     }
 
     // helper for handling streaming responses from the server
@@ -479,7 +497,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     }
 }
 
-/** Indicates the user explictly closed the connection */
+/** Indicates the user explicitly closed the connection */
 class StreamingMethodClosedException : Exception()
 
 /** Get the call context associated with a one time use stub */
@@ -696,6 +714,7 @@ interface ServerStreamingCall<RespT> {
 }
 
 internal class StreamingCallImpl<ReqT, RespT>(
+    private val context: String,
     private val begin: (StreamingCallImpl<ReqT, RespT>, RetryContext) -> Pair<RequestStream<ReqT>, ResponseStream<RespT>>
 ) : StreamingCall<ReqT, RespT> {
 
@@ -706,7 +725,7 @@ internal class StreamingCallImpl<ReqT, RespT>(
 
     override fun start(init: (ResponseStream<RespT>.() -> Unit)) {
         this.init = init
-        restart(RetryContext())
+        restart(RetryContext(context))
     }
 
     internal fun restart(retryContext: RetryContext) {
@@ -718,6 +737,7 @@ internal class StreamingCallImpl<ReqT, RespT>(
 }
 
 internal class ClientStreamingCallImpl<ReqT, RespT>(
+    private val context: String,
     private val begin: (ClientStreamingCallImpl<ReqT, RespT>, RetryContext) -> RequestStream<ReqT>
 ) : ClientStreamingCall<ReqT, RespT> {
 
@@ -725,7 +745,7 @@ internal class ClientStreamingCallImpl<ReqT, RespT>(
     override val response: SettableFuture<RespT> = SettableFuture.create()
 
     override fun start() {
-        restart(RetryContext())
+        restart(RetryContext(context))
     }
 
     internal fun restart(retryContext: RetryContext) {
@@ -734,6 +754,7 @@ internal class ClientStreamingCallImpl<ReqT, RespT>(
 }
 
 internal class ServerStreamingCallImpl<RespT>(
+    private val context: String,
     private val begin: (ServerStreamingCallImpl<RespT>, RetryContext) -> ResponseStreamImpl<RespT>
 ) : ServerStreamingCall<RespT> {
 
@@ -743,7 +764,7 @@ internal class ServerStreamingCallImpl<RespT>(
 
     override fun start(init: (ResponseStream<RespT>.() -> Unit)) {
         this.init = init
-        restart(RetryContext())
+        restart(RetryContext(context))
     }
 
     internal fun restart(retryContext: RetryContext) {

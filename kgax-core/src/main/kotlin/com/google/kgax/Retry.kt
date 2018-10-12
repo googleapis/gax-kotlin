@@ -27,10 +27,12 @@ interface Retry {
 
 /** Context of a retry. */
 data class RetryContext(
+    val id: String,
     val initialRequestTime: Long = System.currentTimeMillis(),
     val numberOfAttempts: Int = 0
 ) {
-    fun next(): RetryContext = RetryContext(initialRequestTime, numberOfAttempts + 1)
+    /** Get a context for the next attempt */
+    fun next() = RetryContext(id, initialRequestTime, numberOfAttempts + 1)
 }
 
 /** Never retry. */
