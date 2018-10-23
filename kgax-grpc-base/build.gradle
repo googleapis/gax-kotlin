@@ -20,7 +20,6 @@ buildscript {
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath "org.jetbrains.dokka:dokka-gradle-plugin:$dokka_version"
     }
 }
 
@@ -34,7 +33,6 @@ version '0.1.0-SNAPSHOT'
 apply plugin: 'idea'
 apply plugin: 'kotlin'
 apply plugin: 'maven'
-apply plugin: 'org.jetbrains.dokka'
 apply plugin: 'com.google.protobuf'
 apply plugin: 'jacoco'
 
@@ -73,13 +71,6 @@ dependencies {
 
 archivesBaseName = 'kgax-grpc-base'
 
-compileKotlin {
-    kotlinOptions.jvmTarget = "1.8"
-}
-compileTestKotlin {
-    kotlinOptions.jvmTarget = "1.8"
-}
-
 protobuf {
     protoc {
         artifact = 'com.google.protobuf:protoc:3.6.1'
@@ -111,24 +102,8 @@ sourceSets {
     }
 }
 
-dokka {
-    outputFormat = 'html'
-    outputDirectory = "$buildDir/javadoc"
-
-    packageOptions {
-        prefix = "com.google.protobuf"
-        suppress = true
-    }
-}
-
 jar {
     exclude "**/*.proto"
-}
-
-test {
-    testLogging {
-        events "PASSED", "FAILED", "SKIPPED"
-    }
 }
 
 jacoco {

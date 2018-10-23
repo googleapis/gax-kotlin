@@ -21,6 +21,7 @@ import com.google.auth.oauth2.GoogleCredentials
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import com.google.kgax.NoRetry
 import com.google.kgax.Page
@@ -794,8 +795,12 @@ class Callback<T> {
     var ignoreErrorIf: ((Throwable) -> Boolean) = { _ -> false }
 }
 
-/** Add a [callback] that will be run on the provided [executor] when the CallResult is available */
-fun <T> FutureCall<T>.on(executor: Executor, callback: Callback<T>.() -> Unit) {
+/**
+ * Add a [callback] that will be run on the provided [executor] when the CallResult is available.
+ *
+ * You must specify an executor to use unless you do not care what thread the callback runs on.
+ */
+fun <T> FutureCall<T>.on(executor: Executor = MoreExecutors.directExecutor(), callback: Callback<T>.() -> Unit) {
     Futures.addCallback<CallResult<T>>(this, object : FutureCallback<CallResult<T>> {
         val cb = Callback<T>().apply(callback)
 
