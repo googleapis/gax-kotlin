@@ -14,33 +14,38 @@
  * limitations under the License.
  */
 
-package com.google.kgax.examples.grpc
+package com.google.api.kgax.examples.grpc
 
 import android.os.AsyncTask
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.widget.TextView
 import com.google.cloud.language.v1.AnalyzeEntitiesRequest
+import com.google.cloud.language.v1.AnalyzeEntitiesResponse
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
-import com.google.kgax.grpc.GrpcClientStub
-import com.google.kgax.grpc.StubFactory
+import com.google.api.kgax.grpc.GrpcClientStub
+import com.google.api.kgax.grpc.StubFactory
 
 /**
- * Kotlin example showcasing request & response metadata using KGax with gRPC.
+ * Kotlin example using KGax with gRPC.
  *
- * @author jbolinger
+ * This is the same as [FutureActivity], but shows the use of a blocking stub
+ * rather than a future based stub (futures are generally recommended).
  */
-class MetadataActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity() {
 
     private val factory = StubFactory(
-            LanguageServiceGrpc.LanguageServiceBlockingStub::class,
-            "language.googleapis.com")
+        LanguageServiceGrpc.LanguageServiceBlockingStub::class,
+        "language.googleapis.com"
+    )
 
     private val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
-            factory.fromServiceAccount(it,
-                    listOf("https://www.googleapis.com/auth/cloud-platform"))
+            factory.fromServiceAccount(
+                it,
+                listOf("https://www.googleapis.com/auth/cloud-platform")
+            )
         }
     }
 
@@ -62,31 +67,27 @@ class MetadataActivity : AppCompatActivity() {
     }
 
     private class ApiTestTask(
-            val stub: GrpcClientStub<LanguageServiceGrpc.LanguageServiceBlockingStub>,
-            val onResult: (String) -> Unit
-    ) : AsyncTask<Unit, Unit, String>() {
-        override fun doInBackground(vararg params: Unit): String {
-            val (response, metadata) = stub.prepare {
-                withMetadata("foo", listOf("1", "2"))
-                withMetadata("bar", listOf("a", "b"))
-            }.executeBlocking {
-                it.analyzeEntities(AnalyzeEntitiesRequest.newBuilder()
-                        .setDocument(Document.newBuilder()
+        val stub: GrpcClientStub<LanguageServiceGrpc.LanguageServiceBlockingStub>,
+        val onResult: (String) -> Unit
+    ) : AsyncTask<Unit, Unit, AnalyzeEntitiesResponse>() {
+        override fun doInBackground(vararg params: Unit): AnalyzeEntitiesResponse {
+            val response = stub.executeBlocking {
+                it.analyzeEntities(
+                    AnalyzeEntitiesRequest.newBuilder()
+                        .setDocument(
+                            Document.newBuilder()
                                 .setContent("Hi there Joe")
                                 .setType(Document.Type.PLAIN_TEXT)
-                                .build())
-                        .build())
+                                .build()
+                        )
+                        .build()
+                )
             }
-
-            // stringify the metadata
-            return metadata.keys().joinToString("\n") { key ->
-                val value = metadata.getAll(key)?.joinToString(", ")
-                "$key=[$value]"
-            }
+            return response.body
         }
 
-        override fun onPostExecute(metadata: String) {
-            onResult("The API responded with metadata keys of: $metadata")
+        override fun onPostExecute(result: AnalyzeEntitiesResponse) {
+            onResult("The API says: $result")
         }
     }
 }

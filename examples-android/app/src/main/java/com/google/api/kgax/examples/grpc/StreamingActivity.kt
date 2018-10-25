@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.examples.grpc
+package com.google.api.kgax.examples.grpc
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -28,8 +28,8 @@ import com.google.cloud.speech.v1.RecognitionConfig
 import com.google.cloud.speech.v1.SpeechGrpc
 import com.google.cloud.speech.v1.StreamingRecognitionConfig
 import com.google.cloud.speech.v1.StreamingRecognizeRequest
-import com.google.kgax.examples.grpc.util.AudioEmitter
-import com.google.kgax.grpc.StubFactory
+import com.google.api.kgax.examples.grpc.util.AudioEmitter
+import com.google.api.kgax.grpc.StubFactory
 
 private const val TAG = "APITest"
 

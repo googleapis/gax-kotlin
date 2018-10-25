@@ -16,7 +16,7 @@
   -->
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.google.kgax.examples.grpc">
+    package="com.google.api.kgax.examples.grpc">
 
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
@@ -44,8 +44,6 @@
         <activity android:name=".MetadataActivity">
         </activity>
         <activity android:name=".StreamingActivity">
-        </activity>
-        <activity android:name=".PagingActivity">
         </activity>
     </application>
 

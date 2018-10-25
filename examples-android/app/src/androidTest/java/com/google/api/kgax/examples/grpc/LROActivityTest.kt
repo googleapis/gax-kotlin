@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.examples.grpc
+package com.google.api.kgax.examples.grpc
 
 import android.support.test.espresso.Espresso.onView
 import android.support.test.espresso.assertion.ViewAssertions.matches
@@ -30,17 +30,17 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 @LargeTest
-class MetadataActivityTest {
+class LROActivityTest {
 
     @Rule
     @JvmField
-    val rule: ActivityTestRule<MetadataActivity> =
-            ActivityTestRule(MetadataActivity::class.java)
+    val rule: ActivityTestRule<LROActivity> =
+            ActivityTestRule(LROActivity::class.java)
 
     @Test
-    fun returnsMetadata() {
+    fun returnsRecognizedResult() {
         onView(withId(R.id.result_text))
-                .check(matches(withText(containsString("content-type"))))
+                .check(matches(withText(containsString("Brooklyn Bridge"))))
     }
 
 }

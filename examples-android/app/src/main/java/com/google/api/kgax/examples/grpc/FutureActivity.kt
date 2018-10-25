@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.examples.grpc
+package com.google.api.kgax.examples.grpc
 
 import android.os.AsyncTask
 import android.os.Bundle
@@ -24,8 +24,8 @@ import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.AnalyzeEntitiesResponse
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
-import com.google.kgax.grpc.GrpcClientStub
-import com.google.kgax.grpc.StubFactory
+import com.google.api.kgax.grpc.GrpcClientStub
+import com.google.api.kgax.grpc.StubFactory
 
 /**
  * Kotlin example using KGax with gRPC.

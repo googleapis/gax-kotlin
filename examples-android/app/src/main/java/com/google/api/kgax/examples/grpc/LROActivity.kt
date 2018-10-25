@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.examples.grpc
+package com.google.api.kgax.examples.grpc
 
 import android.os.AsyncTask
 import android.os.Bundle
@@ -27,8 +27,8 @@ import com.google.cloud.speech.v1.RecognitionAudio
 import com.google.cloud.speech.v1.RecognitionConfig
 import com.google.cloud.speech.v1.SpeechGrpc
 import com.google.common.io.ByteStreams
-import com.google.kgax.grpc.GrpcClientStub
-import com.google.kgax.grpc.StubFactory
+import com.google.api.kgax.grpc.GrpcClientStub
+import com.google.api.kgax.grpc.StubFactory
 import com.google.protobuf.ByteString
 
 private const val TAG = "APITest"

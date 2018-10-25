@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.examples.grpc.util
+package com.google.api.kgax.examples.grpc.util
 
 import android.media.AudioFormat
 import android.media.AudioRecord
