@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax
+package com.google.api.kgax
 
 import com.google.common.truth.Truth.assertThat
 import kotlin.test.Test
@@ -40,7 +40,8 @@ class PagerTest {
         }
 
         var count = 0
-        val pager = pager<RequestType, ResponseType, String> {
+        val pager =
+            pager<RequestType, ResponseType, String> {
                 method = ::method
                 initialRequest = {
                     request
@@ -67,18 +68,19 @@ class PagerTest {
 
     @Test
     fun `Ends when no data`() {
-        val pager = pager<RequestType, ResponseType, String> {
-            method = { ResponseType(listOf()) }
-            initialRequest = {
-                RequestType(2)
+        val pager =
+            pager<RequestType, ResponseType, String> {
+                method = { ResponseType(listOf()) }
+                initialRequest = {
+                    RequestType(2)
+                }
+                nextRequest = { request, token ->
+                    RequestType(request.query, token)
+                }
+                nextPage = { response ->
+                    TestPage(response.items, response.token)
+                }
             }
-            nextRequest = { request, token ->
-                RequestType(request.query, token)
-            }
-            nextPage = { response ->
-                TestPage(response.items, response.token)
-            }
-        }
 
         val results = mutableListOf<String>()
         for(page in pager) {
@@ -90,18 +92,19 @@ class PagerTest {
 
     @Test
     fun `Ends when no token`() {
-        val pager = pager<RequestType, ResponseType, String> {
-            method = { ResponseType(listOf("one")) }
-            initialRequest = {
-                RequestType(2)
+        val pager =
+            pager<RequestType, ResponseType, String> {
+                method = { ResponseType(listOf("one")) }
+                initialRequest = {
+                    RequestType(2)
+                }
+                nextRequest = { request, token ->
+                    RequestType(request.query, token)
+                }
+                nextPage = { response ->
+                    TestPage(response.items)
+                }
             }
-            nextRequest = { request, token ->
-                RequestType(request.query, token)
-            }
-            nextPage = { response ->
-                TestPage(response.items)
-            }
-        }
 
         val results = mutableListOf<String>()
         for (page in pager) {

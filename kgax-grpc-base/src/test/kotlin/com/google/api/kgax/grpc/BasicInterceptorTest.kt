@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.grpc
+package com.google.api.kgax.grpc
 
 import com.google.common.truth.Truth.assertThat
 import com.nhaarman.mockito_kotlin.check

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.grpc
+package com.google.api.kgax.grpc
 
 import com.google.auth.oauth2.AccessToken
 import com.google.auth.oauth2.GoogleCredentials

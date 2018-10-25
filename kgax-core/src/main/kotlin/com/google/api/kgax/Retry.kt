@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax
+package com.google.api.kgax
 
 /** Retry policy for API calls that result in an exception. */
 interface Retry {

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.grpc
+package com.google.api.kgax.grpc
 
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.ListeningExecutorService
@@ -34,7 +34,7 @@ class LongRunningCall<T : MessageLite>(
     private val stub: GrpcClientStub<OperationsGrpc.OperationsFutureStub>,
     private val future: ListenableFuture<CallResult<Operation>>,
     private val responseType: Class<T>,
-    private val executor: ListeningExecutorService = LongRunningCall.executor
+    private val executor: ListeningExecutorService = Companion.executor
 ) {
 
     /** the underlying operation (null until the operation has completed) */
@@ -60,7 +60,10 @@ class LongRunningCall<T : MessageLite>(
             }
         }
         // TODO: get actual metadata
-        return CallResult(parseResult(operation!!, responseType), ResponseMetadata())
+        return CallResult(
+            parseResult(operation!!, responseType),
+            ResponseMetadata()
+        )
     }
 
     /** Block until the operation has been completed. */

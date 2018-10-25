@@ -27,7 +27,7 @@ plugins {
     id "com.google.protobuf" version "0.8.6"
 }
 
-group 'com.google.kgax'
+group 'com.google.api'
 version '0.1.0-SNAPSHOT'
 
 apply plugin: 'idea'

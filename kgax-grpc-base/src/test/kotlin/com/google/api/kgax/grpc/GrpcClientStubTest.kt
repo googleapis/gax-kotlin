@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package com.google.kgax.grpc
+package com.google.api.kgax.grpc
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
-import com.google.kgax.Retry
-import com.google.kgax.RetryContext
+import com.google.api.kgax.Retry
+import com.google.api.kgax.RetryContext
 import com.google.longrunning.Operation
 import com.google.protobuf.Int32Value
 import com.google.protobuf.StringValue
@@ -375,7 +375,8 @@ class GrpcClientStubTest {
             }
         }
 
-        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        val call =
+            GrpcClientStub(stub, ClientCallOptions(retry = retry))
         val result = call.executeLongRunning(StringValue::class.java) { arg ->
             assertThat(arg).isEqualTo(stub)
             val operationFuture = SettableFuture.create<Operation>()
@@ -486,7 +487,8 @@ class GrpcClientStubTest {
         }
 
         // capture output stream
-        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        val call =
+            GrpcClientStub(stub, ClientCallOptions(retry = retry))
 
         var outStream: StreamObserver<StringValue>? = null
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
@@ -543,7 +545,8 @@ class GrpcClientStubTest {
         }
 
         // capture output stream
-        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        val call =
+            GrpcClientStub(stub, ClientCallOptions(retry = retry))
 
         var timesExecuted = 0
         var outStream: StreamObserver<StringValue>? = null
@@ -668,9 +671,11 @@ class GrpcClientStubTest {
         val inStream: StreamObserver<Int32Value> = mock()
 
         // capture output stream
-        val call = GrpcClientStub(stub, ClientCallOptions(
-            initialRequests = listOf(Int32Value(9), Int32Value(99))
-        ))
+        val call = GrpcClientStub(
+            stub, ClientCallOptions(
+                initialRequests = listOf(Int32Value(9), Int32Value(99))
+            )
+        )
         val method = { _: StreamObserver<StringValue> -> inStream }
 
         val result = call.executeStreaming { arg ->
@@ -765,7 +770,8 @@ class GrpcClientStubTest {
         }
 
         // capture output stream
-        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        val call =
+            GrpcClientStub(stub, ClientCallOptions(retry = retry))
         var outStream: StreamObserver<StringValue>? = null
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
             outStream = outs
@@ -808,7 +814,8 @@ class GrpcClientStubTest {
         }
 
         // capture output stream
-        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        val call =
+            GrpcClientStub(stub, ClientCallOptions(retry = retry))
         var outStream: StreamObserver<StringValue>? = null
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
             outStream = outs
@@ -865,9 +872,11 @@ class GrpcClientStubTest {
         val inStream: StreamObserver<Int32Value> = mock()
 
         // capture output stream
-        val call = GrpcClientStub(stub, ClientCallOptions(
-            initialRequests = listOf(Int32Value(1), Int32Value(2))
-        ))
+        val call = GrpcClientStub(
+            stub, ClientCallOptions(
+                initialRequests = listOf(Int32Value(1), Int32Value(2))
+            )
+        )
         val method = { _: StreamObserver<StringValue> -> inStream }
 
         val result = call.executeClientStreaming { arg ->
@@ -973,7 +982,8 @@ class GrpcClientStubTest {
         }
 
         // capture output stream
-        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        val call =
+            GrpcClientStub(stub, ClientCallOptions(retry = retry))
         var outStream: StreamObserver<StringValue>? = null
         val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
             assertThat(it).isEqualTo(stub)
@@ -1023,7 +1033,8 @@ class GrpcClientStubTest {
         }
 
         // capture output stream
-        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        val call =
+            GrpcClientStub(stub, ClientCallOptions(retry = retry))
         var outStream: StreamObserver<StringValue>? = null
         val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
             assertThat(it).isEqualTo(stub)
@@ -1107,14 +1118,11 @@ class GrpcClientStubTest {
     @Test(expected = UninitializedPropertyAccessException::class)
     fun `Throws when a server streaming call is not started`() {
         val stub: TestStub = createTestStubMock()
-        val exception: RuntimeException = mock()
 
         // capture output stream
         val call = GrpcClientStub(stub, ClientCallOptions())
-        var outStream: StreamObserver<StringValue>? = null
         val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
             assertThat(it).isEqualTo(stub)
-            outStream = observer
         }
 
         val responses = mutableListOf<String>()

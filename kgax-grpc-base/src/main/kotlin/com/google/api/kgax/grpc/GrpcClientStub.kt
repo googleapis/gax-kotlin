@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.grpc
+package com.google.api.kgax.grpc
 
 import com.google.auth.oauth2.AccessToken
 import com.google.auth.oauth2.GoogleCredentials
@@ -23,10 +23,10 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
-import com.google.kgax.NoRetry
-import com.google.kgax.Page
-import com.google.kgax.Retry
-import com.google.kgax.RetryContext
+import com.google.api.kgax.NoRetry
+import com.google.api.kgax.Page
+import com.google.api.kgax.Retry
+import com.google.api.kgax.RetryContext
 import com.google.longrunning.Operation
 import com.google.longrunning.OperationsGrpc
 import com.google.protobuf.MessageLite
@@ -84,7 +84,10 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     fun prepare(init: ClientCallOptions.Builder.() -> Unit = {}): GrpcClientStub<T> {
         val builder = ClientCallOptions.Builder(options)
         builder.init()
-        return GrpcClientStub(originalStub, ClientCallOptions(builder))
+        return GrpcClientStub(
+            originalStub,
+            ClientCallOptions(builder)
+        )
     }
 
     /**
@@ -183,7 +186,8 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         context: String = "",
         method: (T) -> ListenableFuture<Operation>
     ): LongRunningCall<RespT> {
-        val operationsStub = GrpcClientStub(OperationsGrpc.newFutureStub(stubWithContext().channel), options)
+        val operationsStub =
+            GrpcClientStub(OperationsGrpc.newFutureStub(stubWithContext().channel), options)
         val future: SettableFuture<CallResult<Operation>> = SettableFuture.create()
         executeFuture(method, future, RetryContext(context))
         return LongRunningCall(operationsStub, future, type)
@@ -270,7 +274,8 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                 self.restart(it.next())
             }
             val requestObserver = method(stub)(responseStreamObserver)
-            val requestStream: RequestStream<ReqT> = object : RequestStream<ReqT> {
+            val requestStream: RequestStream<ReqT> = object :
+                RequestStream<ReqT> {
                 override fun send(request: ReqT) = requestObserver.onNext(request)
                 override fun close() = requestObserver.onCompleted()
             }
@@ -472,7 +477,10 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         // add gax interceptor
         var stub = originalStub
             .withInterceptors(GAXInterceptor())
-            .withOption(ClientCallContext.KEY, ClientCallContext())
+            .withOption(
+                ClientCallContext.KEY,
+                ClientCallContext()
+            )
 
         // add request metadata
         if (options.requestMetadata.isNotEmpty()) {
@@ -513,7 +521,8 @@ fun <T : AbstractStub<T>> T.prepare(init: ClientCallOptions.Builder.() -> Unit =
 }
 
 /** see [GrpcClientStub.prepare] */
-fun <T : AbstractStub<T>> T.prepare(options: ClientCallOptions) = GrpcClientStub(this, options)
+fun <T : AbstractStub<T>> T.prepare(options: ClientCallOptions) =
+    GrpcClientStub(this, options)
 
 /**
  * Decorated call options. The settings apply on a per-call level.

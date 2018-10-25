@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.grpc
+package com.google.api.kgax.grpc
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.MoreExecutors
@@ -86,7 +86,8 @@ class LongRunningCallTest {
             whenever(opStub.withOption(any<CallOptions.Key<*>>(), any())).doReturn(opStub)
             whenever(opStub.callOptions).doReturn(callOptions)
 
-            val grpcClient = GrpcClientStub(opStub, ClientCallOptions())
+            val grpcClient =
+                GrpcClientStub(opStub, ClientCallOptions())
 
             val future = SettableFuture.create<CallResult<Operation>>()
             future.set(

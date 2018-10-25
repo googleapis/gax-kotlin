@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.kgax.grpc
+package com.google.api.kgax.grpc
 
-import com.google.kgax.Retry
-import com.google.kgax.RetryContext
+import com.google.api.kgax.Retry
+import com.google.api.kgax.RetryContext
 import io.grpc.Status
 import io.grpc.StatusRuntimeException
 import kotlin.math.pow

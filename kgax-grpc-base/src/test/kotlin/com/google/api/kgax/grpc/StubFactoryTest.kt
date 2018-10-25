@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax.grpc
+package com.google.api.kgax.grpc
 
 import com.google.auth.oauth2.AccessToken
 import com.google.common.truth.Truth.assertThat
@@ -44,7 +44,8 @@ class StubFactoryTest {
 
     @Test
     fun `creates stubs from factory with options`() {
-        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, "localhost", 8080, true)
+        val factory =
+            StubFactory(OperationsGrpc.OperationsFutureStub::class, "localhost", 8080, true)
         assertThat(factory.channel).isNotNull()
         factory.channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS)
     }
@@ -127,7 +128,8 @@ class StubFactoryTest {
     @Test
     fun `Throws on non stub type`() {
         val channel: ManagedChannel = mock()
-        val factory = StubFactory(TestStub::class, channel)
+        val factory =
+            StubFactory(TestStub::class, channel)
 
         assertFailsWith(IllegalArgumentException::class) {
             factory.fromCallCredentials(mock())
@@ -141,7 +143,10 @@ class StubFactoryTest {
         val channelBuilder: ManagedChannelBuilder<*> = mock {
             on { build() }.then { channel }
         }
-        val factory = StubFactory(TestStub::class, channelBuilder)
+        val factory = StubFactory(
+            TestStub::class,
+            channelBuilder
+        )
 
         factory.shutdown(2)
 

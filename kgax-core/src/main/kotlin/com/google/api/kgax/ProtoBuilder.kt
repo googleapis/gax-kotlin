@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax
+package com.google.api.kgax
 
 /** Marks a Kotlin DSL style helper for a protobuf builder type. */
 @DslMarker

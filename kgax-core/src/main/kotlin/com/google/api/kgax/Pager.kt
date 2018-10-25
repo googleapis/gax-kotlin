@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.kgax
+package com.google.api.kgax
 
 import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
@@ -40,7 +40,7 @@ class Pager<ReqT, RespT, ElementT> internal constructor(
      * occur on [Pager.executor] and the [handler] will be processed on the given [executor].
      */
     fun forEach(executor: Executor?, handler: (Page<ElementT>) -> Unit) {
-        val fetchExecutor = Pager.executor
+        val fetchExecutor = Companion.executor
         val responseExecutor = executor
 
         fun fetch() {
