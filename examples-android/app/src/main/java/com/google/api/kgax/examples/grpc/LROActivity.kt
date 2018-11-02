@@ -21,14 +21,15 @@ import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.widget.TextView
+import com.google.api.kgax.grpc.GrpcClientStub
+import com.google.api.kgax.grpc.StubFactory
+import com.google.api.kgax.grpc.executeLongRunning
 import com.google.cloud.speech.v1.LongRunningRecognizeRequest
 import com.google.cloud.speech.v1.LongRunningRecognizeResponse
 import com.google.cloud.speech.v1.RecognitionAudio
 import com.google.cloud.speech.v1.RecognitionConfig
 import com.google.cloud.speech.v1.SpeechGrpc
 import com.google.common.io.ByteStreams
-import com.google.api.kgax.grpc.GrpcClientStub
-import com.google.api.kgax.grpc.StubFactory
 import com.google.protobuf.ByteString
 
 private const val TAG = "APITest"
@@ -80,25 +81,24 @@ class LROActivity : AppCompatActivity() {
     ) : AsyncTask<Unit, Unit, LongRunningRecognizeResponse>() {
         override fun doInBackground(vararg params: Unit): LongRunningRecognizeResponse {
             // execute a long running operation
-            val lro = stub
-                .executeLongRunning(LongRunningRecognizeResponse::class.java) {
-                    it.longRunningRecognize(
-                        LongRunningRecognizeRequest.newBuilder()
-                            .setAudio(
-                                RecognitionAudio.newBuilder()
-                                    .setContent(audio)
-                                    .build()
-                            )
-                            .setConfig(
-                                RecognitionConfig.newBuilder()
-                                    .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
-                                    .setSampleRateHertz(16000)
-                                    .setLanguageCode("en-US")
-                                    .build()
-                            )
-                            .build()
-                    )
-                }
+            val lro = stub.executeLongRunning(LongRunningRecognizeResponse::class.java) {
+                it.longRunningRecognize(
+                    LongRunningRecognizeRequest.newBuilder()
+                        .setAudio(
+                            RecognitionAudio.newBuilder()
+                                .setContent(audio)
+                                .build()
+                        )
+                        .setConfig(
+                            RecognitionConfig.newBuilder()
+                                .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
+                                .setSampleRateHertz(16000)
+                                .setLanguageCode("en-US")
+                                .build()
+                        )
+                        .build()
+                )
+            }
 
             // wait for the response to complete
             Log.i(TAG, "Waiting for long running operation...")
