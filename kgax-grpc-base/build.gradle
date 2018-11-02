@@ -33,8 +33,8 @@ version '0.1.0-SNAPSHOT'
 apply plugin: 'idea'
 apply plugin: 'kotlin'
 apply plugin: 'maven'
-apply plugin: 'com.google.protobuf'
 apply plugin: 'jacoco'
+apply plugin: 'com.google.protobuf'
 
 repositories {
     google()
@@ -49,16 +49,16 @@ configurations {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
 
-    compile project(':kgax-core')
+    implementation project(':kgax-core')
 
     implementation 'javax.annotation:javax.annotation-api:1.3.2'
 
     implementation "io.grpc:grpc-protobuf-lite:$grpc_version"
 
-    compile "io.grpc:grpc-stub:$grpc_version"
-    compile "io.grpc:grpc-auth:$grpc_version"
-    compile 'com.google.auth:google-auth-library-oauth2-http:0.9.1'
-    compile 'com.google.auth:google-auth-library-credentials:0.9.1'
+    api "io.grpc:grpc-stub:$grpc_version"
+    api "io.grpc:grpc-auth:$grpc_version"
+    api 'com.google.auth:google-auth-library-oauth2-http:0.9.1'
+    api 'com.google.auth:google-auth-library-credentials:0.9.1'
 
     testImplementation "junit:junit:$junit_version"
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
@@ -70,41 +70,6 @@ dependencies {
 }
 
 archivesBaseName = 'kgax-grpc-base'
-
-protobuf {
-    protoc {
-        artifact = 'com.google.protobuf:protoc:3.6.1'
-    }
-    plugins {
-        grpc {
-            artifact = 'io.grpc:protoc-gen-grpc-java:1.10.0'
-        }
-    }
-    generateProtoTasks {
-        all().each { task ->
-            task.builtins {
-                remove java
-            }
-            task.plugins {
-                grpc {
-                    option 'lite'
-                }
-            }
-        }
-    }
-}
-
-sourceSets {
-    main {
-        java {
-            srcDirs += file("${protobuf.generatedFilesBaseDir}/main/grpc")
-        }
-    }
-}
-
-jar {
-    exclude "**/*.proto"
-}
 
 jacoco {
     toolVersion = "0.8.2"
@@ -118,10 +83,26 @@ jacocoTestReport {
     sourceDirectories = files([
             "src/main/kotlin"
     ])
-    afterEvaluate {
-        classDirectories = files(classDirectories.files.collect {
-            fileTree(dir: it, exclude: ['com/google/bytestream/**', 'com/google/longrunning/**'])
-        })
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:$protoc_version"
+    }
+    plugins {
+        javalite {
+            artifact = "com.google.protobuf:protoc-gen-javalite:$protoc_gen_javalite_version"
+        }
+    }
+    generateProtoTasks {
+        all().each { task ->
+            task.builtins {
+                remove java
+            }
+            task.plugins {
+                javalite {}
+            }
+        }
     }
 }
 

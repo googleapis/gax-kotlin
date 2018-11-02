@@ -16,6 +16,10 @@
 
 package com.google.api.kgax.grpc
 
+import com.google.api.kgax.NoRetry
+import com.google.api.kgax.Page
+import com.google.api.kgax.Retry
+import com.google.api.kgax.RetryContext
 import com.google.auth.oauth2.AccessToken
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.common.util.concurrent.FutureCallback
@@ -23,12 +27,6 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
-import com.google.api.kgax.NoRetry
-import com.google.api.kgax.Page
-import com.google.api.kgax.Retry
-import com.google.api.kgax.RetryContext
-import com.google.longrunning.Operation
-import com.google.longrunning.OperationsGrpc
 import com.google.protobuf.MessageLite
 import io.grpc.CallCredentials
 import io.grpc.ClientInterceptor
@@ -165,35 +163,11 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     }
 
     /**
-     * Execute a long running operation. For example:
+     * A generic version of executeFuture for extensions, such as long running operation support.
      *
-     * ```
-     * val lro = stub.executeLongRunning(MyLongRunningResponse::class.java) {
-     *     it.myLongRunningMethod(...)
-     * }
-     * lro.get { print("${it.body}") }
-     * ```
-     *
-     * The [method] lambda should perform a future method call on the stub given as the
-     * first parameter. The result along with any additional information, such as
-     * [ResponseMetadata], will be returned as a [LongRunningCall]. The [type] given
-     * must match the return type of the Operation.
-     *
-     * An optional [context] can be supplied to enable arbitrary retry strategies.
+     * Prefer the other method unless you are creating a similar extension.
      */
-    fun <RespT : MessageLite> executeLongRunning(
-        type: Class<RespT>,
-        context: String = "",
-        method: (T) -> ListenableFuture<Operation>
-    ): LongRunningCall<RespT> {
-        val operationsStub =
-            GrpcClientStub(OperationsGrpc.newFutureStub(stubWithContext().channel), options)
-        val future: SettableFuture<CallResult<Operation>> = SettableFuture.create()
-        executeFuture(method, future, RetryContext(context))
-        return LongRunningCall(operationsStub, future, type)
-    }
-
-    private fun <RespT : MessageLite> executeFuture(
+    fun <RespT : MessageLite> executeFuture(
         method: (T) -> ListenableFuture<RespT>,
         resultFuture: SettableFuture<CallResult<RespT>>,
         retryContext: RetryContext
@@ -219,7 +193,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                     resultFuture.setException(t)
                 }
             }
-        })
+        }, MoreExecutors.directExecutor())
     }
 
     /**
@@ -471,9 +445,10 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     /**
      * Gets a one-time use stub with an initial (empty) context.
      *
-     * This should be called before each API method call.
+     * This method is used internally before each API method call, and is only
+     * useful for creating additional helper methods like [executeBlocking].
      */
-    private fun stubWithContext(): T {
+    fun stubWithContext(): T {
         // add gax interceptor
         var stub = originalStub
             .withInterceptors(GAXInterceptor())

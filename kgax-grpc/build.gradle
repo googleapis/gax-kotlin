@@ -23,32 +23,77 @@ buildscript {
     }
 }
 
+plugins {
+    id "com.google.protobuf" version "0.8.6"
+}
+
 group 'com.google.api'
 version '0.1.0-SNAPSHOT'
 
 apply plugin: 'idea'
 apply plugin: 'kotlin'
 apply plugin: 'maven'
+apply plugin: 'com.google.protobuf'
 
 repositories {
     google()
     mavenCentral()
     jcenter()
+
+    // temporary
+    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
 
-    compile project(':kgax-core')
-    compile project(':kgax-grpc-base')
-
     implementation 'javax.annotation:javax.annotation-api:1.3.2'
 
-    compile "io.grpc:grpc-netty-shaded:$grpc_version"
-    compile "io.grpc:grpc-protobuf-lite:$grpc_version"
+    implementation(project(':kgax-grpc-base')) {
+        exclude group: 'com.google.protobuf', module: 'protobuf-lite'
+    }
+
+    api "io.grpc:grpc-netty-shaded:$grpc_version"
+    api "io.grpc:grpc-protobuf:$grpc_version"
+
+    // temporary
+    compileOnly "com.github.googleapis:gapic-generator-kotlin:c9fc1a8:core@jar"
 
     testImplementation "junit:junit:$junit_version"
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
+    testImplementation 'com.nhaarman:mockito-kotlin:1.6.0'
+    testImplementation "com.google.truth:truth:0.41"
 }
 
 archivesBaseName = 'kgax-grpc'
+
+sourceSets {
+    main {
+        proto {
+            srcDir "$projectDir/../kgax-common-protos"
+        }
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:$protoc_version"
+    }
+    plugins {
+        client {
+            // temporary
+            artifact = "com.github.googleapis:gapic-generator-kotlin:c9fc1a8:core@jar"
+            //path = "${projectDir}/../../gapic-generator-kotlin/generator/build/libs/generator-0.1.0-SNAPSHOT-core.jar"
+        }
+    }
+    generateProtoTasks {
+        all().each { task ->
+            task.plugins {
+                client {
+                    option "include-google-common"
+                    option "no-builders"
+                }
+            }
+        }
+    }
+}

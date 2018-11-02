@@ -67,8 +67,13 @@ internal class GAXInterceptor : ClientInterceptor {
     }
 }
 
-/** Content during an ongoing call */
-internal class ClientCallContext {
+/**
+ * Content during an ongoing call.
+ *
+ * You should not typically use this directly, but you may use
+ * the context if you need to access the underlying gRPC [call].
+ */
+class ClientCallContext {
     lateinit var call: ClientCall<*, *>
     val responseMetadata: ResponseMetadata = ResponseMetadata()
 

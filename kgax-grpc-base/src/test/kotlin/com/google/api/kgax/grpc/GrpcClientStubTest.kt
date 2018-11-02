@@ -16,13 +16,12 @@
 
 package com.google.api.kgax.grpc
 
+import com.google.api.kgax.Retry
+import com.google.api.kgax.RetryContext
 import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
-import com.google.api.kgax.Retry
-import com.google.api.kgax.RetryContext
-import com.google.longrunning.Operation
 import com.google.protobuf.Int32Value
 import com.google.protobuf.StringValue
 import com.nhaarman.mockito_kotlin.any
@@ -331,78 +330,6 @@ class GrpcClientStubTest {
 
         val call = GrpcClientStub(stub, ClientCallOptions())
         call.executeFuture { _ -> future }.get()
-    }
-
-    @Test
-    fun `Can do a long running call`() {
-        val stub: TestStub = createTestStubMock()
-        val operation = Operation.newBuilder()
-            .setName("the op")
-            .setDone(true)
-            .build()
-
-        val call = GrpcClientStub(stub, ClientCallOptions())
-        val result = call.executeLongRunning(StringValue::class.java) { arg ->
-            assertThat(arg).isEqualTo(stub)
-            val operationFuture = SettableFuture.create<Operation>()
-            operationFuture.set(operation)
-            operationFuture
-        }
-        result.get()
-        assertThat(result.operation).isEqualTo(operation)
-    }
-
-    @Test
-    fun `Can retry a long running call`() {
-        val stub: TestStub = createTestStubMock()
-        val exception = IllegalArgumentException("bad lro")
-        val operation = Operation.newBuilder()
-            .setName("the op")
-            .setDone(true)
-            .build()
-
-        val errorFuture = SettableFuture.create<Operation>()
-        errorFuture.setException(exception)
-
-        val retry = object : Retry {
-            var executed = false
-
-            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
-                assertThat(error).isEqualTo(exception)
-                assertThat(context.numberOfAttempts).isEqualTo(0)
-                executed = true
-                return 400
-            }
-        }
-
-        val call =
-            GrpcClientStub(stub, ClientCallOptions(retry = retry))
-        val result = call.executeLongRunning(StringValue::class.java) { arg ->
-            assertThat(arg).isEqualTo(stub)
-            val operationFuture = SettableFuture.create<Operation>()
-            operationFuture.set(operation)
-            if (!retry.executed) {
-                errorFuture
-            } else {
-                operationFuture
-            }
-        }
-        result.get()
-
-        assertThat(result.operation).isEqualTo(operation)
-        assertThat(retry.executed).isTrue()
-    }
-
-    @Test(expected = ExecutionException::class)
-    fun `Throws on an invalid null long running call`() {
-        val stub: TestStub = createTestStubMock()
-
-        val call = GrpcClientStub(stub, ClientCallOptions())
-        call.executeLongRunning(StringValue::class.java) {
-            val operationFuture = SettableFuture.create<Operation>()
-            operationFuture.set(null)
-            operationFuture
-        }.get()
     }
 
     @Test
@@ -1121,18 +1048,14 @@ class GrpcClientStubTest {
 
         // capture output stream
         val call = GrpcClientStub(stub, ClientCallOptions())
-        val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
+        val result = call.executeServerStreaming { it, _: StreamObserver<StringValue> ->
             assertThat(it).isEqualTo(stub)
         }
 
-        val responses = mutableListOf<String>()
-        val exceptions = mutableListOf<Throwable>()
-        var complete = false
-
         // forget to call start
-        result.responses.onNext = { responses.add(it.value) }
-        result.responses.onError = { exceptions.add(it) }
-        result.responses.onCompleted = { complete = true }
+        result.responses.onNext = { fail("did not expect onNext") }
+        result.responses.onError = { fail("did not expect onError") }
+        result.responses.onCompleted = { fail("did not expect onCompleted") }
     }
 
     @Test

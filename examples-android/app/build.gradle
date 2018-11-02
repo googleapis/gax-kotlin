@@ -70,14 +70,14 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile) {
 // compile proto and generate gRPC stubs
 protobuf {
     protoc {
-        artifact = 'com.google.protobuf:protoc:3.6.1'
+        artifact = "com.google.protobuf:protoc:$protoc_version"
     }
     plugins {
         javalite {
-            artifact = 'com.google.protobuf:protoc-gen-javalite:3.0.0'
+            artifact = "com.google.protobuf:protoc-gen-javalite:$protoc_gen_javalite_version"
         }
         grpc {
-            artifact = 'io.grpc:protoc-gen-grpc-java:1.10.0'
+            artifact = "io.grpc:protoc-gen-grpc-java:$grpc_version"
         }
     }
     generateProtoTasks {

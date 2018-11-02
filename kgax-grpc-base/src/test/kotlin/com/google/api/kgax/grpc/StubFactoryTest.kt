@@ -18,7 +18,6 @@ package com.google.api.kgax.grpc
 
 import com.google.auth.oauth2.AccessToken
 import com.google.common.truth.Truth.assertThat
-import com.google.longrunning.OperationsGrpc
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.verify
 import com.nhaarman.mockito_kotlin.whenever
@@ -37,7 +36,7 @@ class StubFactoryTest {
 
     @Test
     fun `creates stubs from factory`() {
-        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, "localhost")
+        val factory = StubFactory(TestStub::class, "localhost")
         assertThat(factory.channel).isNotNull()
         factory.channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS)
     }
@@ -45,7 +44,7 @@ class StubFactoryTest {
     @Test
     fun `creates stubs from factory with options`() {
         val factory =
-            StubFactory(OperationsGrpc.OperationsFutureStub::class, "localhost", 8080, true)
+            StubFactory(TestStub::class, "localhost", 8080, true)
         assertThat(factory.channel).isNotNull()
         factory.channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS)
     }
@@ -53,7 +52,7 @@ class StubFactoryTest {
     @Test
     fun `creates stubs from service account`() {
         val channel: ManagedChannel = mock()
-        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channel)
+        val factory = StubFactory(TestStub::class, channel)
 
         val creds =
             """
@@ -69,13 +68,13 @@ class StubFactoryTest {
         }
 
         assertThat(stub).isNotNull()
-        assertThat(stub.originalStub).isInstanceOf(OperationsGrpc.OperationsFutureStub::class.java)
+        assertThat(stub.originalStub).isInstanceOf(TestStub::class.java)
     }
 
     @Test
     fun `creates stubs from access token`() {
         val channel: ManagedChannel = mock()
-        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channel)
+        val factory = StubFactory(TestStub::class, channel)
 
         val token: AccessToken = mock()
         val stub = factory.fromAccessToken(token, listOf("a", "b"))
@@ -86,7 +85,7 @@ class StubFactoryTest {
     @Test
     fun `Creates blocking stub from call credentials`() {
         val channel: ManagedChannel = mock()
-        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channel)
+        val factory = StubFactory(TestStub::class, channel)
 
         val credentials: CallCredentials = mock()
         val stub = factory.fromCallCredentials(credentials)
@@ -100,7 +99,7 @@ class StubFactoryTest {
     @Test
     fun `Creates future stub from call credentials`() {
         val channel: ManagedChannel = mock()
-        val factory = StubFactory(OperationsGrpc.OperationsFutureStub::class, channel)
+        val factory = StubFactory(TestStub::class, channel)
 
         val credentials: CallCredentials = mock()
         val stub = factory.fromCallCredentials(credentials)
@@ -114,7 +113,7 @@ class StubFactoryTest {
     @Test
     fun `Creates streaming stub from call credentials`() {
         val channel: ManagedChannel = mock()
-        val factory = StubFactory(OperationsGrpc.OperationsStub::class, channel)
+        val factory = StubFactory(TestStub::class, channel)
 
         val credentials: CallCredentials = mock()
         val stub = factory.fromCallCredentials(credentials)
@@ -129,7 +128,7 @@ class StubFactoryTest {
     fun `Throws on non stub type`() {
         val channel: ManagedChannel = mock()
         val factory =
-            StubFactory(TestStub::class, channel)
+            StubFactory(BadStub::class, channel)
 
         assertFailsWith(IllegalArgumentException::class) {
             factory.fromCallCredentials(mock())
@@ -154,11 +153,27 @@ class StubFactoryTest {
         verify(channel).awaitTermination(2, TimeUnit.SECONDS)
     }
 
-    private class TestStub(channel: Channel, options: CallOptions) :
+    class TestStub(channel: Channel, options: CallOptions) :
         AbstractStub<TestStub>(channel, options) {
 
         override fun build(channel: Channel, options: CallOptions): TestStub {
             return TestStub(channel, options)
         }
     }
+
+    companion object {
+        @JvmStatic
+        fun newBlockingStub(channel: Channel) = TestStub(channel, CallOptions.DEFAULT)
+
+        @JvmStatic
+        fun newFutureStub(channel: Channel) = TestStub(channel, CallOptions.DEFAULT)
+
+        @JvmStatic
+        fun newStub(channel: Channel) = TestStub(channel, CallOptions.DEFAULT)
+    }
+}
+
+class BadStub(channel: Channel, options: CallOptions) :
+    AbstractStub<BadStub>(channel, options) {
+    override fun build(channel: Channel, options: CallOptions) = BadStub(channel, options)
 }
