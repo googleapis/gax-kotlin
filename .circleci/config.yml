@@ -82,13 +82,13 @@ jobs:
       - run:
           name: Run all examples
           command: |
-            echo $GCLOUD_SERVICE_KEY > _key.json
-            export CREDENTIALS=_key.json
+            echo $GCLOUD_SERVICE_KEY > /tmp/_key.json
+            export CREDENTIALS=/tmp/_key.json
             export PROJECT=$GCLOUD_PROJECT_ID
             ./gradlew examples:run --args language
             ./gradlew examples:run --args speech
       - run:
-          command: rm _key.json
+          command: rm /tmp/_key.json
           when: always
 
 # -------------------------------------------------------------------------------
