@@ -89,7 +89,7 @@ jobs:
             ./gradlew examples:run --args speech
       - run:
           command: rm _key.json
-        when: always
+          when: always
 
 # -------------------------------------------------------------------------------
 # CI Workflow
