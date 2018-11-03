@@ -75,7 +75,7 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: *kgax-key
+          <<: *kgax-key
       - run:
           name: Download dependencies
           command: ./gradlew dependencies

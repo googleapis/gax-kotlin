@@ -32,6 +32,7 @@ version '0.1.0-SNAPSHOT'
 
 apply plugin: 'idea'
 apply plugin: 'kotlin'
+apply plugin: 'java-library'
 apply plugin: 'maven'
 apply plugin: 'com.google.protobuf'
 
@@ -83,7 +84,6 @@ protobuf {
         client {
             // temporary
             artifact = "com.github.googleapis:gapic-generator-kotlin:c9fc1a8:core@jar"
-            //path = "${projectDir}/../../gapic-generator-kotlin/generator/build/libs/generator-0.1.0-SNAPSHOT-core.jar"
         }
     }
     generateProtoTasks {
