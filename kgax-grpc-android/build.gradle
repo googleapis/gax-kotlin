@@ -60,9 +60,6 @@ dependencies {
     api "io.grpc:grpc-protobuf-lite:$grpc_version"
     api "io.grpc:grpc-android:$grpc_version"
 
-    // temporary
-    compileOnly "com.github.googleapis:gapic-generator-kotlin:c9fc1a8:core@jar"
-    
     testImplementation "junit:junit:$junit_version"
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
     testImplementation 'com.nhaarman:mockito-kotlin:1.6.0'
@@ -87,10 +84,6 @@ protobuf {
         javalite {
             artifact = "com.google.protobuf:protoc-gen-javalite:$protoc_gen_javalite_version"
         }
-        client {
-            // temporary
-            artifact = "com.github.googleapis:gapic-generator-kotlin:c9fc1a8:core@jar"
-        }
     }
     generateProtoTasks {
         all().each { task ->
@@ -99,10 +92,6 @@ protobuf {
             }
             task.plugins {
                 javalite {}
-                client {
-                    option "include-google-common"
-                    option "no-builders"
-                }
             }
         }
     }

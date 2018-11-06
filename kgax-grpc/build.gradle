@@ -57,9 +57,6 @@ dependencies {
     api "io.grpc:grpc-netty-shaded:$grpc_version"
     api "io.grpc:grpc-protobuf:$grpc_version"
 
-    // temporary
-    compileOnly "com.github.googleapis:gapic-generator-kotlin:c9fc1a8:core@jar"
-
     testImplementation "junit:junit:$junit_version"
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
     testImplementation 'com.nhaarman:mockito-kotlin:1.6.0'
@@ -79,21 +76,5 @@ sourceSets {
 protobuf {
     protoc {
         artifact = "com.google.protobuf:protoc:$protoc_version"
-    }
-    plugins {
-        client {
-            // temporary
-            artifact = "com.github.googleapis:gapic-generator-kotlin:c9fc1a8:core@jar"
-        }
-    }
-    generateProtoTasks {
-        all().each { task ->
-            task.plugins {
-                client {
-                    option "include-google-common"
-                    option "no-builders"
-                }
-            }
-        }
     }
 }

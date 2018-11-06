@@ -42,7 +42,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.fail
 
-class LongRunningCallTest2 {
+class LongRunningCallTest {
 
     private val channel: Channel = mock()
     private val clientCall: ClientCall<*, *> = mock()

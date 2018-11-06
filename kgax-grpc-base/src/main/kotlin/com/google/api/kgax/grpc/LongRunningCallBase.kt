@@ -53,8 +53,27 @@ abstract class LongRunningCallBase<T : MessageLite, OpT>(
     })
 
     /** Block until the operation is complete */
-    protected abstract fun wait(future: ListenableFuture<CallResult<OpT>>): ResponseMetadata?
+    private fun wait(future: ListenableFuture<CallResult<OpT>>): ResponseMetadata? {
+        var metadata: ResponseMetadata? = null
 
-    /** Parse the result of the [operation] to the given [type] or throw an error */
+        operation = future.get().body
+        while (!isOperationDone(operation!!)) {
+            try {
+                // try again
+                val result = nextOperation(operation!!)
+
+                // save result of last call
+                operation = result.body
+                metadata = result.metadata
+            } catch (e: InterruptedException) {
+                /* ignore and try again */
+            }
+        }
+
+        return metadata
+    }
+
+    protected abstract fun isOperationDone(op: OpT): Boolean
+    protected abstract fun nextOperation(op: OpT): CallResult<OpT>
     protected abstract fun parse(operation: OpT, type: Class<T>): T
 }
