@@ -91,6 +91,34 @@ jobs:
           command: rm /tmp/_key.json
           when: always
 
+
+  test_android_examples:
+    working_directory: ~/gax-kotlin/examples-android
+    docker:
+      - image: circleci/android:api-28-alpha
+    environment:
+      JVM_OPTS: -Xmx3200m
+    steps:
+      - checkout:
+          path: ~/gax-kotlin
+      - restore_cache:
+          <<: *android-example-key
+      - run:
+          name: Build debug APK and release APK
+          command: ./gradlew assembleDebug assembleDebugAndroidTest
+      - run:
+          name: Run all examples
+          command: |
+            echo $GCLOUD_SERVICE_KEY > /tmp/_key.json
+            sudo gcloud auth activate-service-account --key-file=/tmp/_key.json
+            sudo gcloud --quiet config set project $GCLOUD_PROJECT_ID
+            sudo gcloud firebase test android run
+              --app app/build/outputs/apk/debug/app-debug.apk
+              --test app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+      - run:
+          command: rm /tmp/_key.json
+          when: always
+
 # -------------------------------------------------------------------------------
 # CI Workflow
 # -------------------------------------------------------------------------------
@@ -104,8 +132,13 @@ workflows:
       - test_cloud_examples:
           requires:
             - build
-#          filters: &master-filter
-#            branches:
-#              only: master
-#            tags:
-#              only: /.*/
+        #  filters: &master-filter
+        #    branches:
+        #      only: master
+        #    tags:
+        #      only: /.*/
+     - test_android_examples:
+         requires:
+           - build_android_examples
+        #    filters:
+        #      <<: *master-filter
