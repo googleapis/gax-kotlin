@@ -21,7 +21,7 @@ import io.grpc.CallOptions
 import io.grpc.Channel
 import io.grpc.MethodDescriptor
 import io.grpc.MethodDescriptor.generateFullMethodName
-import io.grpc.protobuf.lite.ProtoLiteUtils
+import io.grpc.protobuf.ProtoUtils
 import io.grpc.stub.AbstractStub
 import io.grpc.stub.ClientCalls.futureUnaryCall
 import javax.annotation.Generated
@@ -37,15 +37,15 @@ class OperationsClientStub(channel: Channel, callOptions: CallOptions = CallOpti
     private val listOperationsDescriptor: MethodDescriptor<ListOperationsRequest, ListOperationsResponse> by lazy {
         MethodDescriptor.newBuilder<ListOperationsRequest, ListOperationsResponse>()
             .setType(MethodDescriptor.MethodType.UNARY)
-            .setFullMethodName(generateFullMethodName("google.Operations", "ListOperations"))
+            .setFullMethodName(generateFullMethodName("google.longrunning.Operations", "ListOperations"))
             .setSampledToLocalTracing(true)
             .setRequestMarshaller(
-                ProtoLiteUtils.marshaller(
+                ProtoUtils.marshaller(
                     ListOperationsRequest.getDefaultInstance()
                 )
             )
             .setResponseMarshaller(
-                ProtoLiteUtils.marshaller(
+                ProtoUtils.marshaller(
                     ListOperationsResponse.getDefaultInstance()
                 )
             )
@@ -56,15 +56,15 @@ class OperationsClientStub(channel: Channel, callOptions: CallOptions = CallOpti
     private val getOperationDescriptor: MethodDescriptor<GetOperationRequest, Operation> by lazy {
         MethodDescriptor.newBuilder<GetOperationRequest, Operation>()
             .setType(MethodDescriptor.MethodType.UNARY)
-            .setFullMethodName(generateFullMethodName("google.Operations", "GetOperation"))
+            .setFullMethodName(generateFullMethodName("google.longrunning.Operations", "GetOperation"))
             .setSampledToLocalTracing(true)
             .setRequestMarshaller(
-                ProtoLiteUtils.marshaller(
+                ProtoUtils.marshaller(
                     GetOperationRequest.getDefaultInstance()
                 )
             )
             .setResponseMarshaller(
-                ProtoLiteUtils.marshaller(
+                ProtoUtils.marshaller(
                     Operation.getDefaultInstance()
                 )
             )
@@ -75,15 +75,15 @@ class OperationsClientStub(channel: Channel, callOptions: CallOptions = CallOpti
     private val deleteOperationDescriptor: MethodDescriptor<DeleteOperationRequest, Empty> by lazy {
         MethodDescriptor.newBuilder<DeleteOperationRequest, Empty>()
             .setType(MethodDescriptor.MethodType.UNARY)
-            .setFullMethodName(generateFullMethodName("google.Operations", "DeleteOperation"))
+            .setFullMethodName(generateFullMethodName("google.longrunning.Operations", "DeleteOperation"))
             .setSampledToLocalTracing(true)
             .setRequestMarshaller(
-                ProtoLiteUtils.marshaller(
+                ProtoUtils.marshaller(
                     DeleteOperationRequest.getDefaultInstance()
                 )
             )
             .setResponseMarshaller(
-                ProtoLiteUtils.marshaller(
+                ProtoUtils.marshaller(
                     Empty.getDefaultInstance()
                 )
             )
@@ -94,15 +94,15 @@ class OperationsClientStub(channel: Channel, callOptions: CallOptions = CallOpti
     private val cancelOperationDescriptor: MethodDescriptor<CancelOperationRequest, Empty> by lazy {
         MethodDescriptor.newBuilder<CancelOperationRequest, Empty>()
             .setType(MethodDescriptor.MethodType.UNARY)
-            .setFullMethodName(generateFullMethodName("google.Operations", "CancelOperation"))
+            .setFullMethodName(generateFullMethodName("google.longrunning.Operations", "CancelOperation"))
             .setSampledToLocalTracing(true)
             .setRequestMarshaller(
-                ProtoLiteUtils.marshaller(
+                ProtoUtils.marshaller(
                     CancelOperationRequest.getDefaultInstance()
                 )
             )
             .setResponseMarshaller(
-                ProtoLiteUtils.marshaller(
+                ProtoUtils.marshaller(
                     Empty.getDefaultInstance()
                 )
             )
