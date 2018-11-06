@@ -105,11 +105,12 @@ jobs:
           <<: *android-example-key
       - run:
           name: Build debug APK and release APK
-          command: ./gradlew assembleDebug assembleDebugAndroidTest
+          command: |
+            echo $GCLOUD_SERVICE_KEY > app/src/main/res/raw/sa.json
+            ./gradlew assembleDebug assembleDebugAndroidTest
       - run:
           name: Run all examples
           command: |
-            echo $GCLOUD_SERVICE_KEY > app/src/main/res/raw/sa.json
             sudo gcloud auth activate-service-account --key-file=app/src/main/res/raw/sa.json
             sudo gcloud --quiet config set project $GCLOUD_PROJECT_ID
             sudo gcloud firebase test android run
