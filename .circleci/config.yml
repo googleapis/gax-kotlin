@@ -109,14 +109,14 @@ jobs:
       - run:
           name: Run all examples
           command: |
-            echo $GCLOUD_SERVICE_KEY > /tmp/_key.json
-            sudo gcloud auth activate-service-account --key-file=/tmp/_key.json
+            echo $GCLOUD_SERVICE_KEY > app/src/main/res/raw/sa.json
+            sudo gcloud auth activate-service-account --key-file=app/src/main/res/raw/sa.json
             sudo gcloud --quiet config set project $GCLOUD_PROJECT_ID
             sudo gcloud firebase test android run
               --app app/build/outputs/apk/debug/app-debug.apk
               --test app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
       - run:
-          command: rm /tmp/_key.json
+          command: rm app/src/main/res/raw/sa.json
           when: always
 
 # -------------------------------------------------------------------------------
