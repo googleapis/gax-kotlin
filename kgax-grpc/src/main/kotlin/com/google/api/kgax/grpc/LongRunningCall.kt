@@ -44,31 +44,15 @@ class LongRunningCall<T : Message>(
         )
     }
 
-    override fun wait(future: ListenableFuture<CallResult<Operation>>): ResponseMetadata? {
-        var metadata: ResponseMetadata? = null
+    override fun isOperationDone(op: Operation) = op.done
 
-        operation = future.get().body
-        while (!operation!!.done) {
-            try {
-                // try again
-                val result = stub.executeFuture {
-                    it.getOperation(
-                        GetOperationRequest.newBuilder()
-                            .setName(operation!!.name)
-                            .build()
-                    )
-                }.get()
-
-                // save result of last call
-                operation = result.body
-                metadata = result.metadata
-            } catch (e: InterruptedException) {
-                /* ignore and try again */
-            }
-        }
-
-        return metadata
-    }
+    override fun nextOperation(op: Operation) = stub.executeFuture {
+        it.getOperation(
+            GetOperationRequest.newBuilder()
+                .setName(operation!!.name)
+                .build()
+        )
+    }.get()!!
 
     override fun parse(operation: Operation, type: Class<T>): T {
         if (operation.error == null || operation.error.code == Status.Code.OK.value()) {
