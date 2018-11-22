@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-rootProject.name = 'kgax'
+rootProject.name = "kgax"
 
-include 'kgax-core'
-include 'kgax-grpc'
-include 'kgax-grpc-base'
-include 'kgax-grpc-android'
-include 'examples'
+include("kgax-core")
+include("kgax-grpc")
+include("kgax-grpc-base")
+include("kgax-grpc-android")
+include("examples")

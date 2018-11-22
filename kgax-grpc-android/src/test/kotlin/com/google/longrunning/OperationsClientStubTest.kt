@@ -72,5 +72,4 @@ class OperationsClientStubTest {
         CancelOperationRequest.newBuilder().build(),
         OperationsClientStub::cancelOperation
     )
-
 }

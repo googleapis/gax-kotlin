@@ -14,4 +14,24 @@
  * limitations under the License.
  */
 
-rootProject.name = 'kgax-core'
+plugins {
+    idea
+    maven
+    kotlin("jvm")
+}
+
+dependencies {
+    compile(kotlin("stdlib"))
+
+    implementation("javax.annotation:javax.annotation-api:${ext["javax_annotation_version"]}")
+
+    testImplementation(kotlin("test"))
+    testImplementation(kotlin("test-junit"))
+    testImplementation("junit:junit:${ext["junit_version"]}")
+    testImplementation("com.nhaarman:mockito-kotlin:${ext["mockito_kotlin_version"]}")
+    testImplementation("com.google.truth:truth:${ext["truth_version"]}")
+}
+
+base {
+    archivesBaseName = "kgax-core"
+}

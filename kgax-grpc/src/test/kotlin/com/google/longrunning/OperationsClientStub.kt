@@ -45,7 +45,6 @@ class OperationsClientStub(channel: Channel, callOptions: CallOptions = CallOpti
                 )
             )
             .build()
-
     }
 
     private val getOperationDescriptor: MethodDescriptor<GetOperationRequest, Operation> by lazy {
@@ -64,7 +63,6 @@ class OperationsClientStub(channel: Channel, callOptions: CallOptions = CallOpti
                 )
             )
             .build()
-
     }
 
     private val deleteOperationDescriptor: MethodDescriptor<DeleteOperationRequest, Empty> by lazy {
@@ -83,7 +81,6 @@ class OperationsClientStub(channel: Channel, callOptions: CallOptions = CallOpti
                 )
             )
             .build()
-
     }
 
     private val cancelOperationDescriptor: MethodDescriptor<CancelOperationRequest, Empty> by lazy {
@@ -102,7 +99,6 @@ class OperationsClientStub(channel: Channel, callOptions: CallOptions = CallOpti
                 )
             )
             .build()
-
     }
 
     override fun build(channel: Channel, callOptions: CallOptions): OperationsClientStub =

@@ -14,4 +14,4 @@
  * limitations under the License.
  */
 
-rootProject.name = 'kgax-grpc'
+rootProject.name = "kgax-grpc-android"
