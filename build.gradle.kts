@@ -49,7 +49,7 @@ allprojects {
         set("protobuf_version", "3.6.1")
         set("protoc_version", "3.6.1")
         set("protobuf_lite_version", "3.0.1")
-        set("protoc_gen_java_lite_version", "3.0.0")
+        set("protoc_gen_javalite_version", "3.0.0")
         set("grpc_version", "1.16.1")
 
         set("junit_version", "4.12")

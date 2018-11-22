@@ -73,7 +73,7 @@ protobuf {
     }
     plugins {
         id("javalite") {
-            artifact = "com.google.protobuf:protoc-gen-javalite:${ext["protoc_gen_java_lite_version"]}"
+            artifact = "com.google.protobuf:protoc-gen-javalite:${ext["protoc_gen_javalite_version"]}"
         }
     }
     generateProtoTasks {
