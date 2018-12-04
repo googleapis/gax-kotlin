@@ -27,7 +27,7 @@ import java.util.concurrent.Executors
  * if it's available in your application as well.
  */
 class Pager<ReqT, RespT, ElementT> internal constructor(
-        private val config: PagerConfig<ReqT, RespT, ElementT>
+    private val config: PagerConfig<ReqT, RespT, ElementT>
 ) : AbstractIterator<Page<ElementT>>() {
 
     private var token: String? = null
@@ -135,7 +135,8 @@ interface Page<T> {
  *  }
  * ```
  */
-fun <ReqT, RespT, ElementT> pager(init: PagerConfig<ReqT, RespT, ElementT>.() -> Unit
+fun <ReqT, RespT, ElementT> pager(
+    init: PagerConfig<ReqT, RespT, ElementT>.() -> Unit
 ): Pager<ReqT, RespT, ElementT> {
     val config = PagerConfig<ReqT, RespT, ElementT>()
     config.init()
@@ -162,5 +163,4 @@ class PagerConfig<ReqT, RespT, ElementT> {
 
     /** A lambda to extract the result list, next page token, and any other arbitrary metadata after a new page is fetched. */
     lateinit var nextPage: (RespT) -> Page<ElementT>
-
 }

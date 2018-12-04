@@ -37,9 +37,9 @@ class Main {
             try {
                 when (example) {
                     "language" -> languageExample()
-                    //"logging" -> loggingExample()
+                    // "logging" -> loggingExample()
                     "speech" -> speechExample()
-                    //"pubsub" -> pubSubExample()
+                    // "pubsub" -> pubSubExample()
                     else -> usage()
                 }
                 System.exit(0)

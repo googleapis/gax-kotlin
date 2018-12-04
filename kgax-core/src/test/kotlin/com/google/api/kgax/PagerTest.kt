@@ -24,9 +24,11 @@ class PagerTest {
     data class RequestType(val query: Int, val token: String? = null)
     data class ResponseType(val items: List<String>, val token: String? = null)
 
-    data class TestPage(override val elements: Iterable<String>,
-                        override val token: String? = null,
-                        override val metadata: String? = null) : Page<String>
+    data class TestPage(
+        override val elements: Iterable<String>,
+        override val token: String? = null,
+        override val metadata: String? = null
+    ) : Page<String>
 
     @Test
     fun `Pages through data`() {
@@ -61,7 +63,7 @@ class PagerTest {
             for (entry in page.elements) {
                 results.add(entry)
             }
-            assertThat(page.metadata).isEqualTo("extra_${idx+1}")
+            assertThat(page.metadata).isEqualTo("extra_${idx + 1}")
         }
         assertThat(results).containsExactly("one", "two", "three", "four", "five", "six")
     }
@@ -83,7 +85,7 @@ class PagerTest {
             }
 
         val results = mutableListOf<String>()
-        for(page in pager) {
+        for (page in pager) {
             page.elements.forEach { results.add(it) }
             assertThat(page.metadata).isNull()
         }

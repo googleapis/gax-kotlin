@@ -14,4 +14,4 @@
  * limitations under the License.
  */
 
-rootProject.name = 'kgax-grpc-base'
+rootProject.name = "kgax-grpc-base"
