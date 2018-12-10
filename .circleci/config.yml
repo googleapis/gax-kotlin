@@ -139,5 +139,5 @@ workflows:
       - test_android_examples:
           requires:
             - build_android_examples
-             filters:
-               <<: *master-filter
+          filters:
+            <<: *master-filter
