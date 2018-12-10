@@ -20,6 +20,7 @@ import com.google.api.kgax.grpc.StubFactory
 import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /**
@@ -31,13 +32,10 @@ import java.io.File
  * $ CREDENTIALS=<path_to_your_service_account.json> ./gradlew examples:run --args language
  * ```
  */
-fun languageExample() {
-    val credentials = System.getenv("CREDENTIALS")
-        ?: throw RuntimeException("You must set the CREDENTIALS environment variable to run this example")
-
+fun languageExample(credentials: String) = runBlocking {
     // create a stub factory
     val factory = StubFactory(
-        LanguageServiceGrpc.LanguageServiceBlockingStub::class,
+        LanguageServiceGrpc.LanguageServiceFutureStub::class,
         "language.googleapis.com"
     )
 
@@ -47,7 +45,7 @@ fun languageExample() {
     }
 
     // call the API
-    val response = stub.executeBlocking {
+    val response = stub.execute {
         it.analyzeEntities(
             AnalyzeEntitiesRequest.newBuilder()
                 .setDocument(
@@ -55,10 +53,12 @@ fun languageExample() {
                         .setContent("Hi there Joe")
                         .setType(Document.Type.PLAIN_TEXT)
                         .build()
-                )
-                .build()
+                ).build()
         )
     }
 
     println("The API says: ${response.body}")
+
+    // shutdown all connections
+    factory.shutdown()
 }

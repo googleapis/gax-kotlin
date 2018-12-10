@@ -26,6 +26,7 @@ import com.google.cloud.speech.v1.SpeechGrpc
 import com.google.common.io.ByteStreams
 import com.google.protobuf.ByteString
 import example.Main
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /**
@@ -37,10 +38,7 @@ import java.io.File
  * $ CREDENTIALS=<path_to_your_service_account.json> ./gradlew examples:run --args speech
  * ```
  */
-fun speechExample() {
-    val credentials = System.getenv("CREDENTIALS")
-        ?: throw RuntimeException("You must set the CREDENTIALS environment variable to run this example")
-
+fun speechExample(credentials: String) = runBlocking {
     // create a stub factory
     val factory = StubFactory(
         SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com"
@@ -78,7 +76,10 @@ fun speechExample() {
 
     // wait for the response to complete
     println("Waiting for long running operation...")
-    val (response, _) = lro.get()
+    val (response, _) = lro.await()
 
     println("Operation completed: ${lro.operation?.name} with result:\n$response")
+
+    // shutdown all connections
+    factory.shutdown()
 }

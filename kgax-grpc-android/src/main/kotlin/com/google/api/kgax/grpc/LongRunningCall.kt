@@ -16,11 +16,7 @@
 
 package com.google.api.kgax.grpc
 
-import com.google.api.kgax.RetryContext
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.ListeningExecutorService
-import com.google.common.util.concurrent.MoreExecutors
-import com.google.common.util.concurrent.SettableFuture
 import com.google.longrunning.GetOperationRequest
 import com.google.longrunning.Operation
 import com.google.longrunning.OperationsClientStub
@@ -28,32 +24,26 @@ import com.google.protobuf.ByteString
 import com.google.protobuf.MessageLite
 import io.grpc.Status
 import io.grpc.stub.AbstractStub
-import java.util.concurrent.Executors
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /** Resolves long running operations. */
 class LongRunningCall<T : MessageLite>(
     private val stub: GrpcClientStub<OperationsClientStub>,
-    future: ListenableFuture<CallResult<Operation>>,
-    responseType: Class<T>,
-    executor: ListeningExecutorService = Companion.executor
-) : LongRunningCallBase<T, Operation>(future, responseType, executor) {
+    deferred: Deferred<CallResult<Operation>>,
+    responseType: Class<T>
+) : LongRunningCallBase<T, Operation>(deferred, responseType) {
 
-    companion object {
-        /** The default executor to use for resolving operations. */
-        var executor: ListeningExecutorService = MoreExecutors.listeningDecorator(
-            Executors.newCachedThreadPool()
-        )
-    }
-
-    override fun isOperationDone(op: Operation) = op.done
-
-    override fun nextOperation(op: Operation) = stub.executeFuture {
+    override suspend fun nextOperation(op: Operation) = stub.execute {
         it.getOperation(
             GetOperationRequest.newBuilder()
                 .setName(operation!!.name)
                 .build()
         )
-    }.get()!!
+    }
+
+    override fun isOperationDone(op: Operation) = op.done
 
     override fun parse(operation: Operation, type: Class<T>): T {
         if (operation.error == null || operation.error.code == Status.Code.OK.value()) {
@@ -72,10 +62,10 @@ class LongRunningCall<T : MessageLite>(
  * Execute a long running operation. For example:
  *
  * ```
- * val lro = stub.executeLongRunning(MyLongRunningResponse::class.java) {
+ * val response = stub.executeLongRunning(MyLongRunningResponse::class.java) {
  *     it.myLongRunningMethod(...)
  * }
- * lro.get { print("${it.body}") }
+ * print("${response.body}")
  * ```
  *
  * The [method] lambda should perform a future method call on the stub given as the
@@ -85,13 +75,12 @@ class LongRunningCall<T : MessageLite>(
  *
  * An optional [context] can be supplied to enable arbitrary retry strategies.
  */
-fun <RespT : MessageLite, T : AbstractStub<T>> GrpcClientStub<T>.executeLongRunning(
+suspend fun <RespT : MessageLite, T : AbstractStub<T>> GrpcClientStub<T>.executeLongRunning(
     type: Class<RespT>,
     context: String = "",
     method: (T) -> ListenableFuture<Operation>
-): LongRunningCall<RespT> {
+): LongRunningCall<RespT> = coroutineScope {
     val operationsStub = GrpcClientStub(OperationsClientStub(stubWithContext().channel), options)
-    val future: SettableFuture<CallResult<Operation>> = SettableFuture.create()
-    executeFuture(method, future, RetryContext(context))
-    return LongRunningCall(operationsStub, future, type)
+    val deferred = async { execute(context, method) }
+    LongRunningCall(operationsStub, deferred, type)
 }
