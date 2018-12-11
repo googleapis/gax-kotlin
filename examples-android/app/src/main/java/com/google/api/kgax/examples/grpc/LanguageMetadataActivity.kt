@@ -23,7 +23,6 @@ import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
 /**
@@ -52,7 +51,7 @@ class LanguageMetadataActivity : AbstractExampleActivity<LanguageServiceGrpc.Lan
         super.onCreate(savedInstanceState)
 
         // call the api
-        GlobalScope.launch(Dispatchers.Main) {
+        launch(Dispatchers.Main) {
             val (_, metadata) = stub.prepare {
                 withMetadata("foo", listOf("1", "2"))
                 withMetadata("bar", listOf("a", "b"))

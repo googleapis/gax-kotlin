@@ -21,9 +21,9 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
 import com.google.protobuf.ByteString
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.produce
@@ -40,7 +40,7 @@ internal class AudioEmitter {
     private var readJob: Job? = null
 
     /** Start streaming  */
-    suspend fun start(): ReceiveChannel<ByteString> = GlobalScope.produce(Dispatchers.IO) {
+    suspend fun start(scope: CoroutineScope): ReceiveChannel<ByteString> = scope.produce(Dispatchers.IO) {
         // TODO: in a real app you may not want to fix these
         val encoding = AudioFormat.ENCODING_PCM_16BIT
         val channel = AudioFormat.CHANNEL_IN_MONO

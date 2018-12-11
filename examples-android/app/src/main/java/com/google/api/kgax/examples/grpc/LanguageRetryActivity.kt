@@ -26,7 +26,6 @@ import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
 /**
@@ -54,7 +53,7 @@ class LanguageRetryActivity : AbstractExampleActivity<LanguageServiceGrpc.Langua
         super.onCreate(savedInstanceState)
 
         // call the api
-        GlobalScope.launch(Dispatchers.Main) {
+        launch(Dispatchers.Main) {
             val response = stub.prepare {
                 withRetry(RetryForever)
             }.execute { it ->

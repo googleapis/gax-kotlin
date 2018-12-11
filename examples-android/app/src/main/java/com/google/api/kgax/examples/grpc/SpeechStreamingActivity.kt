@@ -30,11 +30,12 @@ import com.google.cloud.speech.v1.StreamingRecognitionConfig
 import com.google.cloud.speech.v1.StreamingRecognizeRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val TAG = "APITest"
+private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
+private val PERMISSIONS = arrayOf(Manifest.permission.RECORD_AUDIO)
 
 /**
  * Kotlin example showcasing streaming APIs using KGax with gRPC and the Google Speech API.
@@ -43,12 +44,8 @@ private const val TAG = "APITest"
 class SpeechStreamingActivity : AbstractExampleActivity<SpeechGrpc.SpeechStub>(
     CountingIdlingResource("SpeechStreaming")
 ) {
-
-    private val PERMISSIONS = arrayOf(Manifest.permission.RECORD_AUDIO)
-    private val REQUEST_RECORD_AUDIO_PERMISSION = 200
-
     private var permissionToRecord = false
-    private var audioEmitter: AudioEmitter? = null
+    private val audioEmitter: AudioEmitter = AudioEmitter()
 
     override val factory = StubFactory(
         SpeechGrpc.SpeechStub::class, "speech.googleapis.com"
@@ -75,7 +72,7 @@ class SpeechStreamingActivity : AbstractExampleActivity<SpeechGrpc.SpeechStub>(
 
         // kick-off recording process, if we're allowed
         if (permissionToRecord) {
-            GlobalScope.launch(Dispatchers.Main) {
+            launch(Dispatchers.Main) {
                 // start streaming the data to the server and collect responses
                 val streams = stub.prepare {
                     withInitialRequest(StreamingRecognizeRequest.newBuilder().apply {
@@ -93,8 +90,7 @@ class SpeechStreamingActivity : AbstractExampleActivity<SpeechGrpc.SpeechStub>(
 
                 // monitor the input stream and send requests as audio data becomes available
                 launch(Dispatchers.IO) {
-                    audioEmitter = AudioEmitter()
-                    for (bytes in audioEmitter!!.start()) {
+                    for (bytes in audioEmitter.start(this)) {
                         streams.requests.send(
                             StreamingRecognizeRequest.newBuilder().apply {
                                 audioContent = bytes
@@ -123,8 +119,7 @@ class SpeechStreamingActivity : AbstractExampleActivity<SpeechGrpc.SpeechStub>(
         super.onPause()
 
         // ensure mic data stops
-        audioEmitter?.stop()
-        audioEmitter = null
+        audioEmitter.stop()
     }
 
     override fun onRequestPermissionsResult(

@@ -29,7 +29,6 @@ import com.google.cloud.speech.v1.SpeechGrpc
 import com.google.common.io.ByteStreams
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
 private const val TAG = "APITest"
@@ -63,7 +62,7 @@ class SpeechActivity : AbstractExampleActivity<SpeechGrpc.SpeechFutureStub>(
         }
 
         // call the api
-        GlobalScope.launch(Dispatchers.Main) {
+        launch(Dispatchers.Main) {
             // execute a long running operation
             val lro = stub.executeLongRunning(LongRunningRecognizeResponse::class.java) {
                 it.longRunningRecognize(
