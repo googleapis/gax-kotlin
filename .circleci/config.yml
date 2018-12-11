@@ -131,13 +131,13 @@ workflows:
       - test_cloud_examples:
           requires:
             - build
-          filters: &master-filter
-            branches:
-              only: master
-            tags:
-              only: /.*/
+#          filters: &master-filter
+#            branches:
+#              only: master
+#            tags:
+#              only: /.*/
       - test_android_examples:
           requires:
             - build_android_examples
-          filters:
-            <<: *master-filter
+#          filters:
+#            <<: *master-filter
