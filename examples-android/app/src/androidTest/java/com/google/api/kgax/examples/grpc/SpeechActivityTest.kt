@@ -17,6 +17,7 @@
 package com.google.api.kgax.examples.grpc
 
 import android.support.test.espresso.Espresso.onView
+import android.support.test.espresso.IdlingRegistry
 import android.support.test.espresso.assertion.ViewAssertions.matches
 import android.support.test.espresso.matcher.ViewMatchers.withId
 import android.support.test.espresso.matcher.ViewMatchers.withText
@@ -39,7 +40,8 @@ class SpeechActivityTest {
 
     @Test
     fun returnsRecognizedResult() {
-        onView(withId(R.id.result_text))
+        IdlingRegistry.getInstance().register(rule.activity.idler)
+        onView(withId(R.id.resultText))
             .check(matches(withText(containsString("Brooklyn Bridge"))))
     }
 }

@@ -29,14 +29,15 @@ abstract class LongRunningCallBase<T : MessageLite, OpT>(
         protected set
 
     /** If the operation is done */
-    val isDone = {
-        val op = operation
-        if (op != null) {
-            isOperationDone(op)
-        } else {
-            false
+    val isDone: Boolean
+        get() {
+            val op = operation
+            return if (op != null) {
+                isOperationDone(op)
+            } else {
+                false
+            }
         }
-    }
 
     /** Wait until the operation has been completed. */
     suspend fun await(): CallResult<T> {

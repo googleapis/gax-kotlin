@@ -17,9 +17,8 @@
 package com.google.api.kgax.examples.grpc
 
 import android.os.Bundle
-import android.support.v7.app.AppCompatActivity
+import android.support.test.espresso.idling.CountingIdlingResource
 import android.util.Log
-import android.widget.TextView
 import com.google.api.kgax.Retry
 import com.google.api.kgax.RetryContext
 import com.google.api.kgax.grpc.StubFactory
@@ -27,20 +26,21 @@ import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
 /**
  * Kotlin example showcasing client side retries using KGax with gRPC and the
  * Google Natural Language API.
  */
-class LanguageRetryActivity : AppCompatActivity() {
-    private val factory = StubFactory(
+class LanguageRetryActivity : AbstractExampleActivity<LanguageServiceGrpc.LanguageServiceFutureStub>(
+    CountingIdlingResource("LanguageRetry")
+) {
+    override val factory = StubFactory(
         LanguageServiceGrpc.LanguageServiceFutureStub::class,
         "language.googleapis.com"
     )
 
-    private val stub by lazy {
+    override val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
             factory.fromServiceAccount(
                 it,
@@ -51,12 +51,9 @@ class LanguageRetryActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        val resultText: TextView = findViewById(R.id.result_text)
 
         // call the api
-        GlobalScope.launch(Dispatchers.Main) {
+        launch(Dispatchers.Main) {
             val response = stub.prepare {
                 withRetry(RetryForever)
             }.execute { it ->
@@ -70,15 +67,8 @@ class LanguageRetryActivity : AppCompatActivity() {
                 )
             }
 
-            resultText.text = response.body.toString()
+            updateUIWithExampleResult(response.body.toString())
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-
-        // clean up
-        factory.shutdown()
     }
 }
 

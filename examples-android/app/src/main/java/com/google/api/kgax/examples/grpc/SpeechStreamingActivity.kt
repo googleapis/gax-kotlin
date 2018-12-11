@@ -19,10 +19,9 @@ package com.google.api.kgax.examples.grpc
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.support.test.espresso.idling.CountingIdlingResource
 import android.support.v4.app.ActivityCompat
-import android.support.v7.app.AppCompatActivity
 import android.util.Log
-import android.widget.TextView
 import com.google.api.kgax.examples.grpc.util.AudioEmitter
 import com.google.api.kgax.grpc.StubFactory
 import com.google.cloud.speech.v1.RecognitionConfig
@@ -31,29 +30,28 @@ import com.google.cloud.speech.v1.StreamingRecognitionConfig
 import com.google.cloud.speech.v1.StreamingRecognizeRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val TAG = "APITest"
+private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
+private val PERMISSIONS = arrayOf(Manifest.permission.RECORD_AUDIO)
 
 /**
  * Kotlin example showcasing streaming APIs using KGax with gRPC and the Google Speech API.
  */
 @ExperimentalCoroutinesApi
-class SpeechStreamingActivity : AppCompatActivity() {
-
-    private val PERMISSIONS = arrayOf(Manifest.permission.RECORD_AUDIO)
-    private val REQUEST_RECORD_AUDIO_PERMISSION = 200
-
+class SpeechStreamingActivity : AbstractExampleActivity<SpeechGrpc.SpeechStub>(
+    CountingIdlingResource("SpeechStreaming")
+) {
     private var permissionToRecord = false
-    private var audioEmitter: AudioEmitter? = null
+    private val audioEmitter: AudioEmitter = AudioEmitter()
 
-    private val factory = StubFactory(
+    override val factory = StubFactory(
         SpeechGrpc.SpeechStub::class, "speech.googleapis.com"
     )
 
-    private val stub by lazy {
+    override val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
             factory.fromServiceAccount(
                 it,
@@ -64,7 +62,6 @@ class SpeechStreamingActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
 
         // get permissions
         ActivityCompat.requestPermissions(this, PERMISSIONS, REQUEST_RECORD_AUDIO_PERMISSION)
@@ -73,11 +70,9 @@ class SpeechStreamingActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
-        val resultText: TextView = findViewById(R.id.result_text)
-
         // kick-off recording process, if we're allowed
         if (permissionToRecord) {
-            GlobalScope.launch(Dispatchers.Main) {
+            launch(Dispatchers.Main) {
                 // start streaming the data to the server and collect responses
                 val streams = stub.prepare {
                     withInitialRequest(StreamingRecognizeRequest.newBuilder().apply {
@@ -95,8 +90,7 @@ class SpeechStreamingActivity : AppCompatActivity() {
 
                 // monitor the input stream and send requests as audio data becomes available
                 launch(Dispatchers.IO) {
-                    audioEmitter = AudioEmitter()
-                    for (bytes in audioEmitter!!.start()) {
+                    for (bytes in audioEmitter.start(this)) {
                         streams.requests.send(
                             StreamingRecognizeRequest.newBuilder().apply {
                                 audioContent = bytes
@@ -113,7 +107,7 @@ class SpeechStreamingActivity : AppCompatActivity() {
 
                 // handle incoming responses
                 for (response in streams.responses) {
-                    resultText.text = response.toString()
+                    updateUIWithExampleResult(response.toString())
                 }
             }
         } else {
@@ -125,15 +119,7 @@ class SpeechStreamingActivity : AppCompatActivity() {
         super.onPause()
 
         // ensure mic data stops
-        audioEmitter?.stop()
-        audioEmitter = null
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-
-        // cleanup
-        factory.shutdown()
+        audioEmitter.stop()
     }
 
     override fun onRequestPermissionsResult(

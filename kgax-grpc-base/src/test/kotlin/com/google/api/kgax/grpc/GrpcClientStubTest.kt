@@ -49,11 +49,11 @@ import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.fail
 
+private fun string(value: String): StringValue = StringValue.newBuilder().setValue(value).build()
+private fun int32(value: Int): Int32Value = Int32Value.newBuilder().setValue(value).build()
+
 @ExperimentalCoroutinesApi
 class GrpcClientStubTest {
-
-    fun StringValue(value: String): StringValue = StringValue.newBuilder().setValue(value).build()
-    fun Int32Value(value: Int): Int32Value = Int32Value.newBuilder().setValue(value).build()
 
     private val channel: Channel = mock()
     private val clientCall: ClientCall<*, *> = mock()
@@ -100,7 +100,7 @@ class GrpcClientStubTest {
             withAccessToken(mock(), listOf("scope"))
             withInterceptor(interceptor1)
             withInterceptor(interceptor2)
-            withInitialRequest(StringValue("!"))
+            withInitialRequest(string("!"))
             withMetadata("a", listOf("aa", "aaa"))
             withMetadata("b", listOf("bb"))
             withRetry(retry)
@@ -110,7 +110,7 @@ class GrpcClientStubTest {
 
         assertThat(opts).isNotEqualTo(newOpts)
         assertThat(newOpts.interceptors).containsExactly(interceptor1, interceptor2)
-        assertThat(newOpts.initialRequests).containsExactly(StringValue("!"))
+        assertThat(newOpts.initialRequests).containsExactly(string("!"))
         assertThat(newOpts.credentials).isNotNull()
         assertThat(newOpts.requestMetadata.keys).containsExactly("a", "b")
         assertThat(newOpts.retry).isEqualTo(retry)
@@ -159,7 +159,7 @@ class GrpcClientStubTest {
     fun `Can do a future call`() = runBlocking<Unit> {
         val stub: TestStub = createTestStubMock()
         val future = SettableFuture.create<StringValue>()
-        future.set(StringValue("hi"))
+        future.set(string("hi"))
 
         val credentials: CallCredentials = mock()
         val interceptor: ClientInterceptor = mock()
@@ -214,7 +214,7 @@ class GrpcClientStubTest {
         val future1 = SettableFuture.create<StringValue>()
         val future2 = SettableFuture.create<StringValue>()
         future1.setException(exception)
-        future2.set(StringValue("hi again"))
+        future2.set(string("hi again"))
 
         val credentials: CallCredentials = mock()
         val interceptor: ClientInterceptor = mock()
@@ -269,16 +269,16 @@ class GrpcClientStubTest {
             ::method
         }
 
-        result.requests.send(Int32Value(1))
-        result.requests.send(Int32Value(2))
+        result.requests.send(int32(1))
+        result.requests.send(int32(2))
 
         // fake output from server
-        outStream?.onNext(StringValue("one"))
-        outStream?.onNext(StringValue("two"))
+        outStream?.onNext(string("one"))
+        outStream?.onNext(string("two"))
         outStream?.onCompleted()
 
-        verify(inStream).onNext(Int32Value(1))
-        verify(inStream).onNext(Int32Value(2))
+        verify(inStream).onNext(int32(1))
+        verify(inStream).onNext(int32(2))
         verify(inStream).onCompleted()
         verify(clientCall, never()).cancel(any(), any())
         assertThat(result.responses.map { it.value }.toList()).containsExactly("one", "two").inOrder()
@@ -349,8 +349,8 @@ class GrpcClientStubTest {
         outStream?.onError(exception)
         delay(200)
 
-        outStream?.onNext(StringValue("one"))
-        outStream?.onNext(StringValue("two"))
+        outStream?.onNext(string("one"))
+        outStream?.onNext(string("two"))
         outStream?.onCompleted()
 
         verify(inStream).onCompleted()
@@ -392,7 +392,7 @@ class GrpcClientStubTest {
         }
 
         // fake output from server
-        outStream?.onNext(StringValue("result"))
+        outStream?.onNext(string("result"))
         outStream?.onError(exception1)
         outStream?.onCompleted()
 
@@ -420,12 +420,12 @@ class GrpcClientStubTest {
             method
         }
 
-        result.requests.send(Int32Value(5))
-        result.requests.send(Int32Value(55))
+        result.requests.send(int32(5))
+        result.requests.send(int32(55))
         result.requests.close()
 
-        verify(inStream).onNext(Int32Value(5))
-        verify(inStream).onNext(Int32Value(55))
+        verify(inStream).onNext(int32(5))
+        verify(inStream).onNext(int32(55))
         verify(inStream).onCompleted()
     }
 
@@ -437,7 +437,7 @@ class GrpcClientStubTest {
         // capture output stream
         val call = GrpcClientStub(
             stub, ClientCallOptions(
-                initialRequests = listOf(Int32Value(9), Int32Value(99))
+                initialRequests = listOf(int32(9), int32(99))
             )
         )
         val method = { _: StreamObserver<StringValue> -> inStream }
@@ -447,12 +447,12 @@ class GrpcClientStubTest {
             method
         }
 
-        result.requests.send(Int32Value(0))
+        result.requests.send(int32(0))
         result.requests.close()
 
-        verify(inStream).onNext(Int32Value(9))
-        verify(inStream).onNext(Int32Value(99))
-        verify(inStream).onNext(Int32Value(0))
+        verify(inStream).onNext(int32(9))
+        verify(inStream).onNext(int32(99))
+        verify(inStream).onNext(int32(0))
         verify(inStream).onCompleted()
     }
 
@@ -475,19 +475,19 @@ class GrpcClientStubTest {
                 ::method
             }
 
-            result.requests.send(Int32Value(10))
-            result.requests.send(Int32Value(20))
+            result.requests.send(int32(10))
+            result.requests.send(int32(20))
 
             // fake output from server
             if (ex != null) {
                 outStream?.onError(ex)
             } else {
-                outStream?.onNext(StringValue("abc"))
+                outStream?.onNext(string("abc"))
             }
             outStream?.onCompleted()
 
-            verify(inStream).onNext(Int32Value(10))
-            verify(inStream).onNext(Int32Value(20))
+            verify(inStream).onNext(int32(10))
+            verify(inStream).onNext(int32(20))
             if (ex != null) {
                 assertFailsWith<IllegalArgumentException>("failed") { runBlocking { result.response.await() } }
             } else {
@@ -529,17 +529,17 @@ class GrpcClientStubTest {
             ::method
         }
 
-        result.requests.send(Int32Value(1))
-        result.requests.send(Int32Value(2))
+        result.requests.send(int32(1))
+        result.requests.send(int32(2))
 
         // fake output from server
         outStream?.onError(exception)
         delay(200)
-        outStream?.onNext(StringValue("xyz"))
+        outStream?.onNext(string("xyz"))
         outStream?.onCompleted()
 
-        verify(inStream).onNext(Int32Value(1))
-        verify(inStream).onNext(Int32Value(2))
+        verify(inStream).onNext(int32(1))
+        verify(inStream).onNext(int32(2))
         assertThat(result.response.await().value).isEqualTo("xyz")
 
         assertThat(retry.executed).isTrue()
@@ -571,17 +571,17 @@ class GrpcClientStubTest {
             ::method
         }
 
-        result.requests.send(Int32Value(1))
-        result.requests.send(Int32Value(2))
+        result.requests.send(int32(1))
+        result.requests.send(int32(2))
 
         // fake output from server
-        outStream?.onNext(StringValue("xyz"))
+        outStream?.onNext(string("xyz"))
         outStream?.onError(RuntimeException("it failed"))
         delay(200)
         outStream?.onCompleted()
 
-        verify(inStream).onNext(Int32Value(1))
-        verify(inStream).onNext(Int32Value(2))
+        verify(inStream).onNext(int32(1))
+        verify(inStream).onNext(int32(2))
         assertThat(result.response.await().value).isEqualTo("xyz")
     }
 
@@ -599,12 +599,12 @@ class GrpcClientStubTest {
             method
         }
 
-        result.requests.send(Int32Value(5))
-        result.requests.send(Int32Value(55))
+        result.requests.send(int32(5))
+        result.requests.send(int32(55))
         result.requests.close()
 
-        verify(inStream).onNext(Int32Value(5))
-        verify(inStream).onNext(Int32Value(55))
+        verify(inStream).onNext(int32(5))
+        verify(inStream).onNext(int32(55))
         verify(inStream).onCompleted()
     }
 
@@ -616,7 +616,7 @@ class GrpcClientStubTest {
         // capture output stream
         val call = GrpcClientStub(
             stub, ClientCallOptions(
-                initialRequests = listOf(Int32Value(1), Int32Value(2))
+                initialRequests = listOf(int32(1), int32(2))
             )
         )
         val method = { _: StreamObserver<StringValue> -> inStream }
@@ -626,12 +626,12 @@ class GrpcClientStubTest {
             method
         }
 
-        result.requests.send(Int32Value(100))
+        result.requests.send(int32(100))
         result.requests.close()
 
-        verify(inStream).onNext(Int32Value(1))
-        verify(inStream).onNext(Int32Value(2))
-        verify(inStream).onNext(Int32Value(100))
+        verify(inStream).onNext(int32(1))
+        verify(inStream).onNext(int32(2))
+        verify(inStream).onNext(int32(100))
         verify(inStream).onCompleted()
     }
 
@@ -648,8 +648,8 @@ class GrpcClientStubTest {
         }
 
         // fake output from server
-        outStream?.onNext(StringValue("one"))
-        outStream?.onNext(StringValue("two"))
+        outStream?.onNext(string("one"))
+        outStream?.onNext(string("two"))
         outStream?.onCompleted()
 
         assertThat(result.responses.map { it.value }.toList()).containsExactly("one", "two").inOrder()
@@ -706,8 +706,8 @@ class GrpcClientStubTest {
         delay(200)
 
         // fake output from server
-        outStream?.onNext(StringValue("one"))
-        outStream?.onNext(StringValue("two"))
+        outStream?.onNext(string("one"))
+        outStream?.onNext(string("two"))
         outStream?.onCompleted()
 
         assertThat(result.responses.map { it.value }.toList()).containsExactly("one", "two").inOrder()
@@ -739,8 +739,8 @@ class GrpcClientStubTest {
         }
 
         // fake output from server
-        outStream?.onNext(StringValue("one"))
-        outStream?.onNext(StringValue("two"))
+        outStream?.onNext(string("one"))
+        outStream?.onNext(string("two"))
         outStream?.onCompleted()
 
         assertThat(result.responses.map { it.value }.toList()).containsExactly("one", "two").inOrder()
@@ -787,12 +787,12 @@ class GrpcClientStubTest {
 
         val call = GrpcClientStub(stub, ClientCallOptions())
         val otherCall = call.prepare {
-            withInitialRequest(StringValue("init!"))
+            withInitialRequest(string("init!"))
         }
 
         assertThat(call).isNotEqualTo(otherCall)
         assertThat(otherCall.options.initialRequests)
-            .containsExactly(StringValue("init!"))
+            .containsExactly(string("init!"))
     }
 
     private fun createTestStubMock(): TestStub {
