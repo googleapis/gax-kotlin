@@ -26,6 +26,7 @@ import com.google.cloud.speech.v1.SpeechGrpc
 import com.google.common.io.ByteStreams
 import com.google.protobuf.ByteString
 import example.Main
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /**
@@ -37,10 +38,7 @@ import java.io.File
  * $ CREDENTIALS=<path_to_your_service_account.json> ./gradlew examples:run --args speech
  * ```
  */
-fun speechExample() {
-    val credentials = System.getenv("CREDENTIALS")
-        ?: throw RuntimeException("You must set the CREDENTIALS environment variable to run this example")
-
+fun speechExample(credentials: String) = runBlocking {
     // create a stub factory
     val factory = StubFactory(
         SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com"
@@ -52,33 +50,32 @@ fun speechExample() {
     }
 
     // get some audio to use
-    val audio = Main::class.java.getResourceAsStream("/audio.raw").use {
+    val audioData = Main::class.java.getResourceAsStream("/audio.raw").use {
         ByteString.copyFrom(ByteStreams.toByteArray(it))
     }
 
     // call the API
     val lro = stub.executeLongRunning(LongRunningRecognizeResponse::class.java) {
         it.longRunningRecognize(
-            LongRunningRecognizeRequest.newBuilder()
-                .setAudio(
-                    RecognitionAudio.newBuilder()
-                        .setContent(audio)
-                        .build()
-                )
-                .setConfig(
-                    RecognitionConfig.newBuilder()
-                        .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
-                        .setSampleRateHertz(16000)
-                        .setLanguageCode("en-US")
-                        .build()
-                )
-                .build()
+            LongRunningRecognizeRequest.newBuilder().apply {
+                audio = RecognitionAudio.newBuilder().apply {
+                    content = audioData
+                }.build()
+                config = RecognitionConfig.newBuilder().apply {
+                    languageCode = "en-US"
+                    encoding = RecognitionConfig.AudioEncoding.LINEAR16
+                    sampleRateHertz = 16000
+                }.build()
+            }.build()
         )
     }
 
     // wait for the response to complete
     println("Waiting for long running operation...")
-    val (response, _) = lro.get()
+    val (response, _) = lro.await()
 
     println("Operation completed: ${lro.operation?.name} with result:\n$response")
+
+    // shutdown all connections
+    factory.shutdown()
 }

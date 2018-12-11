@@ -28,22 +28,20 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <activity android:name=".MainActivity">
+        <activity android:name=".LanguageActivity">
+
+        </activity>
+        <activity android:name=".LanguageMetadataActivity">
+        </activity>
+        <activity android:name=".LanguageRetryActivity">
+        </activity>
+        <activity android:name=".SpeechActivity">
+        </activity>
+        <activity android:name=".SpeechStreamingActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
-        <activity android:name=".FutureActivity">
-        </activity>
-        <activity android:name=".RetryActivity">
-        </activity>
-        <activity android:name=".LROActivity">
-        </activity>
-        <activity android:name=".MetadataActivity">
-        </activity>
-        <activity android:name=".StreamingActivity">
         </activity>
     </application>
 

@@ -30,17 +30,16 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 @LargeTest
-class MainActivityTest {
+class SpeechActivityTest {
 
     @Rule
     @JvmField
-    val activityRule: ActivityTestRule<MainActivity> =
-            ActivityTestRule(MainActivity::class.java)
+    val rule: ActivityTestRule<SpeechActivity> =
+        ActivityTestRule(SpeechActivity::class.java)
 
     @Test
-    fun returnsIdentifiedEntity() {
+    fun returnsRecognizedResult() {
         onView(withId(R.id.result_text))
-                .check(matches(withText(containsString("type: PERSON"))))
+            .check(matches(withText(containsString("Brooklyn Bridge"))))
     }
-
 }

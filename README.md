@@ -5,18 +5,21 @@ Google API extensions for Kotlin.
 [![CircleCI](https://circleci.com/gh/googleapis/gax-kotlin/tree/master.svg?style=svg)](https://circleci.com/gh/googleapis/gax-kotlin/tree/master)
 [![codecov](https://codecov.io/gh/googleapis/gax-kotlin/branch/master/graph/badge.svg)](https://codecov.io/gh/googleapis/gax-kotlin)
 
-KGax is a small set of utility libraries for interacting with generated [gRPC](https://grpc.io/) Java stubs in Kotlin.  
+KGax is a small set of utility libraries for interacting with generated [gRPC](https://grpc.io/) Java stubs 
+in Kotlin using coroutines.
+ 
 It may be used directly to make interacting with the gRPC stubs easier in Kotlin, or it can be combined with 
-a code generator to produce higher-level client libraries leveraging gRPC. 
+a code generator, like [this one](https://github.com/googleapis/gapic-generator-kotlin), to produce higher-level 
+client libraries leveraging gRPC. 
 
 KGax currently includes:
 
   1. **kgax-grpc**: Utilities for using gRPC Java stubs in Kotlin using the Netty transport provider.
-  1. **kgax-grpc-android**: Same, but using the OkHttp transport provider.
+  1. **kgax-grpc-android**: Same, but using the OkHttp transport provider and protobuf lite runtime.
 
 ## Usage
 
-Refer to the examples in the `examples-android` directory.
+Refer to the examples in the `examples` and `examples-android` directories.
 
 ## Contributing
 

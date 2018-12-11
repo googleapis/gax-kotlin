@@ -19,26 +19,29 @@ package com.google.api.kgax.examples.grpc
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.CountDownTimer
 import android.support.v4.app.ActivityCompat
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.widget.TextView
+import com.google.api.kgax.examples.grpc.util.AudioEmitter
+import com.google.api.kgax.grpc.StubFactory
 import com.google.cloud.speech.v1.RecognitionConfig
 import com.google.cloud.speech.v1.SpeechGrpc
 import com.google.cloud.speech.v1.StreamingRecognitionConfig
 import com.google.cloud.speech.v1.StreamingRecognizeRequest
-import com.google.api.kgax.examples.grpc.util.AudioEmitter
-import com.google.api.kgax.grpc.StubFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val TAG = "APITest"
 
 /**
- * Kotlin example showcasing streaming APIs using KGax with gRPC.
- *
- * @author jbolinger
+ * Kotlin example showcasing streaming APIs using KGax with gRPC and the Google Speech API.
  */
-class StreamingActivity : AppCompatActivity() {
+@ExperimentalCoroutinesApi
+class SpeechStreamingActivity : AppCompatActivity() {
 
     private val PERMISSIONS = arrayOf(Manifest.permission.RECORD_AUDIO)
     private val REQUEST_RECORD_AUDIO_PERMISSION = 200
@@ -47,12 +50,15 @@ class StreamingActivity : AppCompatActivity() {
     private var audioEmitter: AudioEmitter? = null
 
     private val factory = StubFactory(
-            SpeechGrpc.SpeechStub::class, "speech.googleapis.com")
+        SpeechGrpc.SpeechStub::class, "speech.googleapis.com"
+    )
 
     private val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
-            factory.fromServiceAccount(it,
-                    listOf("https://www.googleapis.com/auth/cloud-platform"))
+            factory.fromServiceAccount(
+                it,
+                listOf("https://www.googleapis.com/auth/cloud-platform")
+            )
         }
     }
 
@@ -61,8 +67,7 @@ class StreamingActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         // get permissions
-        ActivityCompat.requestPermissions(
-                this, PERMISSIONS, REQUEST_RECORD_AUDIO_PERMISSION)
+        ActivityCompat.requestPermissions(this, PERMISSIONS, REQUEST_RECORD_AUDIO_PERMISSION)
     }
 
     override fun onResume() {
@@ -72,45 +77,45 @@ class StreamingActivity : AppCompatActivity() {
 
         // kick-off recording process, if we're allowed
         if (permissionToRecord) {
-            audioEmitter = AudioEmitter()
+            GlobalScope.launch(Dispatchers.Main) {
+                // start streaming the data to the server and collect responses
+                val streams = stub.prepare {
+                    withInitialRequest(StreamingRecognizeRequest.newBuilder().apply {
+                        streamingConfig = StreamingRecognitionConfig.newBuilder().apply {
+                            config = RecognitionConfig.newBuilder().apply {
+                                languageCode = "en-US"
+                                encoding = RecognitionConfig.AudioEncoding.LINEAR16
+                                sampleRateHertz = 16000
+                            }.build()
+                            interimResults = false
+                            singleUtterance = false
+                        }.build()
+                    }.build())
+                }.executeStreaming { it::streamingRecognize }
 
-            // start streaming the data to the server and collect responses
-            val stream = stub.prepare {
-                withInitialRequest(StreamingRecognizeRequest.newBuilder()
-                        .setStreamingConfig(StreamingRecognitionConfig.newBuilder()
-                                .setConfig(RecognitionConfig.newBuilder()
-                                        .setLanguageCode("en-US")
-                                        .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
-                                        .setSampleRateHertz(16000)
-                                        .build())
-                                .setInterimResults(false)
-                                .setSingleUtterance(false))
-                        .build())
-            }.executeStreaming { it::streamingRecognize }
-
-            // monitor the input stream and send requests as audio data becomes available
-            audioEmitter!!.start { bytes ->
-                stream.requests.send(StreamingRecognizeRequest.newBuilder()
-                        .setAudioContent(bytes)
-                        .build())
-            }
-
-            // handle incoming responses
-            stream.start {
-                onNext = { resultText.text = it.toString() }
-                onError = { Log.e(TAG, "uh oh", it) }
-                onCompleted = { Log.i(TAG, "All done!") }
-            }
-
-            object : CountDownTimer(5_000, 5_000) {
-                override fun onFinish() {
-                    stream.responses.close()
+                // monitor the input stream and send requests as audio data becomes available
+                launch(Dispatchers.IO) {
+                    audioEmitter = AudioEmitter()
+                    for (bytes in audioEmitter!!.start()) {
+                        streams.requests.send(
+                            StreamingRecognizeRequest.newBuilder().apply {
+                                audioContent = bytes
+                            }.build()
+                        )
+                    }
                 }
 
-                override fun onTick(millisUntilFinished: Long) {
+                // stop after a few seconds
+                launch {
+                    delay(5_000)
+                    streams.requests.close()
                 }
 
-            }.start()
+                // handle incoming responses
+                for (response in streams.responses) {
+                    resultText.text = response.toString()
+                }
+            }
         } else {
             Log.e(TAG, "No permission to record! Please allow and then relaunch the app!")
         }
@@ -131,9 +136,11 @@ class StreamingActivity : AppCompatActivity() {
         factory.shutdown()
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int,
-                                            permissions: Array<String>,
-                                            grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         when (requestCode) {

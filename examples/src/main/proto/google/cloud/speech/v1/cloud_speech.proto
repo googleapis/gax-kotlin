@@ -49,10 +49,6 @@ service Speech {
   // Performs bidirectional streaming speech recognition: receive results while
   // sending audio. This method is only available via the gRPC API (not REST).
   rpc StreamingRecognize(stream StreamingRecognizeRequest) returns (stream StreamingRecognizeResponse);
-
-  // added for testing
-  rpc StreamingFooClient(stream StreamingRecognizeRequest) returns (StreamingRecognizeResponse);
-  rpc StreamingFooServer(StreamingRecognizeRequest) returns (stream StreamingRecognizeResponse);
 }
 
 // The top-level message sent by the client for the `Recognize` method.

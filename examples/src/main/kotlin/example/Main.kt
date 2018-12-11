@@ -17,6 +17,8 @@ package example
 
 import example.grpc.languageExample
 import example.grpc.speechExample
+import example.grpc.speechStreamingExample
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 /**
  * Simple example of calling the Google Cloud APIs with a generated Kotlin gRPC client.
@@ -24,22 +26,22 @@ import example.grpc.speechExample
  * Run the examples using your service account as follows:
  *
  * ```
- * $ CREDENTIALS=<path_to_your_service_account.json> ./gradlew run
+ * $ CREDENTIALS=<path_to_your_service_account.json> ./gradlew run --args language
  * ```
  */
 class Main {
-
     companion object {
-
+        @ExperimentalCoroutinesApi
         @JvmStatic
         fun main(args: Array<String>) {
             val example = args.firstOrNull()?.toLowerCase()
             try {
+                val credentials = System.getenv("CREDENTIALS")
+                    ?: throw RuntimeException("You must set the CREDENTIALS environment variable to run this example")
                 when (example) {
-                    "language" -> languageExample()
-                    // "logging" -> loggingExample()
-                    "speech" -> speechExample()
-                    // "pubsub" -> pubSubExample()
+                    "language" -> languageExample(credentials)
+                    "speech" -> speechExample(credentials)
+                    "transcribe" -> speechStreamingExample(credentials)
                     else -> usage()
                 }
                 System.exit(0)

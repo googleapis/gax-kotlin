@@ -16,31 +16,34 @@
 
 package com.google.api.kgax.examples.grpc
 
-import android.os.AsyncTask
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.widget.TextView
+import com.google.api.kgax.grpc.StubFactory
 import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
-import com.google.api.kgax.grpc.GrpcClientStub
-import com.google.api.kgax.grpc.StubFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 /**
- * Kotlin example showcasing request & response metadata using KGax with gRPC.
- *
- * @author jbolinger
+ * Kotlin example showcasing request & response metadata using KGax with gRPC and the
+ * Google Natural Language API.
  */
-class MetadataActivity : AppCompatActivity() {
+class LanguageMetadataActivity : AppCompatActivity() {
 
     private val factory = StubFactory(
-            LanguageServiceGrpc.LanguageServiceBlockingStub::class,
-            "language.googleapis.com")
+        LanguageServiceGrpc.LanguageServiceFutureStub::class,
+        "language.googleapis.com"
+    )
 
     private val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
-            factory.fromServiceAccount(it,
-                    listOf("https://www.googleapis.com/auth/cloud-platform"))
+            factory.fromServiceAccount(
+                it,
+                listOf("https://www.googleapis.com/auth/cloud-platform")
+            )
         }
     }
 
@@ -51,7 +54,27 @@ class MetadataActivity : AppCompatActivity() {
         val resultText: TextView = findViewById(R.id.result_text)
 
         // call the api
-        ApiTestTask(stub) { resultText.text = it }.execute()
+        GlobalScope.launch(Dispatchers.Main) {
+            val (_, metadata) = stub.prepare {
+                withMetadata("foo", listOf("1", "2"))
+                withMetadata("bar", listOf("a", "b"))
+            }.execute {
+                it.analyzeEntities(
+                    AnalyzeEntitiesRequest.newBuilder().apply {
+                        document = Document.newBuilder().apply {
+                            content = "Hi there Joe"
+                            type = Document.Type.PLAIN_TEXT
+                        }.build()
+                    }.build()
+                )
+            }
+
+            // stringify the metadata
+            resultText.text = metadata.keys().joinToString("\n") { key ->
+                val value = metadata.getAll(key)?.joinToString(", ")
+                "$key=[$value]"
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -59,34 +82,5 @@ class MetadataActivity : AppCompatActivity() {
 
         // clean up
         factory.shutdown()
-    }
-
-    private class ApiTestTask(
-            val stub: GrpcClientStub<LanguageServiceGrpc.LanguageServiceBlockingStub>,
-            val onResult: (String) -> Unit
-    ) : AsyncTask<Unit, Unit, String>() {
-        override fun doInBackground(vararg params: Unit): String {
-            val (response, metadata) = stub.prepare {
-                withMetadata("foo", listOf("1", "2"))
-                withMetadata("bar", listOf("a", "b"))
-            }.executeBlocking {
-                it.analyzeEntities(AnalyzeEntitiesRequest.newBuilder()
-                        .setDocument(Document.newBuilder()
-                                .setContent("Hi there Joe")
-                                .setType(Document.Type.PLAIN_TEXT)
-                                .build())
-                        .build())
-            }
-
-            // stringify the metadata
-            return metadata.keys().joinToString("\n") { key ->
-                val value = metadata.getAll(key)?.joinToString(", ")
-                "$key=[$value]"
-            }
-        }
-
-        override fun onPostExecute(metadata: String) {
-            onResult("The API responded with metadata keys of: $metadata")
-        }
     }
 }

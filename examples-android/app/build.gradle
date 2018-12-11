@@ -54,6 +54,7 @@ dependencies {
     // use the local files here, but in a real app use the released artifact as shown
     implementation project(':kgax-grpc-android')
     //implementation 'com.google.kgax:kgax-grpc-android:0.1.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.0.1'
 
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'com.android.support.test:rules:1.0.2'

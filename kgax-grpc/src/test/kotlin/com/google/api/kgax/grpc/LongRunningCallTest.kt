@@ -19,7 +19,6 @@ package com.google.api.kgax.grpc
 import com.google.api.kgax.Retry
 import com.google.api.kgax.RetryContext
 import com.google.common.truth.Truth.assertThat
-import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 import com.google.longrunning.Operation
 import com.google.longrunning.OperationsClientStub
@@ -36,10 +35,10 @@ import io.grpc.Channel
 import io.grpc.ClientCall
 import io.grpc.Status
 import io.grpc.stub.AbstractStub
-import java.util.concurrent.ExecutionException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.runBlocking
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.fail
 
 class LongRunningCallTest {
 
@@ -57,7 +56,7 @@ class LongRunningCallTest {
     }
 
     @Test
-    fun `LRO waits until done`() {
+    fun `LRO waits until done`() = runBlocking<Unit> {
         val futureDoneOk = SettableFuture.create<Operation>()
         futureDoneOk.set(
             Operation.newBuilder()
@@ -103,8 +102,7 @@ class LongRunningCallTest {
             val grpcClient =
                 GrpcClientStub(opStub, ClientCallOptions())
 
-            val future = SettableFuture.create<CallResult<Operation>>()
-            future.set(
+            val deferred = CompletableDeferred(
                 CallResult(
                     Operation.newBuilder()
                         .setName("test_op")
@@ -112,15 +110,15 @@ class LongRunningCallTest {
                         .build(), mock()
                 )
             )
-            val lro = LongRunningCall(grpcClient, future, StringValue::class.java)
+            val lro = LongRunningCall(grpcClient, deferred, StringValue::class.java)
 
             if (futureDone == futureDoneOk) {
-                val result = lro.asFuture().get()
+                val result = lro.await()
                 assertThat(result.body).isEqualTo(StringValue("long time"))
             } else {
                 var error: Throwable? = null
                 try {
-                    lro.asFuture().get()
+                    lro.await()
                 } catch (ex: Throwable) {
                     error = ex
                 }
@@ -130,49 +128,7 @@ class LongRunningCallTest {
     }
 
     @Test
-    fun `LRO behaves as a future`() {
-        val operationFuture = SettableFuture.create<CallResult<Operation>>()
-        val operation = Operation.newBuilder()
-            .setDone(true)
-            .setResponse(Any.pack(StringValue("1")))
-            .build()
-        operationFuture.set(CallResult(operation, ResponseMetadata()))
-        val grpcClient: GrpcClientStub<OperationsClientStub> = mock {
-            on { executeFuture<Operation>(any(), any()) }
-                .thenReturn(operationFuture)
-        }
-
-        val lro = LongRunningCall(grpcClient, operationFuture, StringValue::class.java)
-        val result = lro.get()
-
-        assertThat(result.body).isEqualTo(StringValue("1"))
-        assertThat(lro.isDone).isTrue()
-        assertThat(lro.operation).isEqualTo(operation)
-    }
-
-    @Test
-    fun `LRO behaves as a future on`() {
-        val operationFuture = SettableFuture.create<CallResult<Operation>>()
-        val operation = Operation.newBuilder()
-            .setDone(true)
-            .setResponse(Any.pack(StringValue("!")))
-            .build()
-        operationFuture.set(CallResult(operation, ResponseMetadata()))
-        val grpcClient: GrpcClientStub<OperationsClientStub> = mock {
-            on { executeFuture<Operation>(any(), any()) }.thenReturn(operationFuture)
-        }
-
-        val lro = LongRunningCall(grpcClient, operationFuture, StringValue::class.java)
-        lro.on(MoreExecutors.directExecutor()) {
-            success = { assertThat(it.body.value).isEqualTo("!") }
-            error = { fail("error not expected") }
-        }
-        assertThat(lro.isDone).isTrue()
-        assertThat(lro.operation).isEqualTo(operation)
-    }
-
-    @Test
-    fun `Can do a long running call`() {
+    fun `Can do a long running call`() = runBlocking {
         val stub: TestStub = createTestStubMock()
         val operation = Operation.newBuilder()
             .setName("the op")
@@ -187,12 +143,12 @@ class LongRunningCallTest {
             operationFuture.set(operation)
             operationFuture
         }
-        assertThat(result.get().body).isEqualTo(StringValue("hey there!"))
+        assertThat(result.await().body).isEqualTo(StringValue("hey there!"))
         assertThat(result.operation).isEqualTo(operation)
     }
 
     @Test
-    fun `Can retry a long running call`() {
+    fun `Can retry a long running call`() = runBlocking {
         val stub: TestStub = createTestStubMock()
         val exception = IllegalArgumentException("bad lro")
         val operation = Operation.newBuilder()
@@ -228,13 +184,13 @@ class LongRunningCallTest {
             }
         }
 
-        assertThat(result.get().body).isEqualTo(StringValue("ok"))
+        assertThat(result.await().body).isEqualTo(StringValue("ok"))
         assertThat(result.operation).isEqualTo(operation)
         assertThat(retry.executed).isTrue()
     }
 
-    @Test(expected = ExecutionException::class)
-    fun `Throws on an invalid null long running call`() {
+    @Test(expected = NullPointerException::class)
+    fun `Throws on an invalid null long running call`() = runBlocking<Unit> {
         val stub: TestStub = createTestStubMock()
 
         val call = GrpcClientStub(stub, ClientCallOptions())
@@ -242,7 +198,7 @@ class LongRunningCallTest {
             val operationFuture = SettableFuture.create<Operation>()
             operationFuture.set(null)
             operationFuture
-        }.get()
+        }.await()
     }
 
     private fun createTestStubMock(): TestStub {

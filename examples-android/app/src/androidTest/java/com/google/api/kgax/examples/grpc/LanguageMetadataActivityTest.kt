@@ -30,12 +30,12 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 @LargeTest
-class MetadataActivityTest {
+class LanguageMetadataActivityTest {
 
     @Rule
     @JvmField
-    val rule: ActivityTestRule<MetadataActivity> =
-            ActivityTestRule(MetadataActivity::class.java)
+    val rule: ActivityTestRule<LanguageMetadataActivity> =
+            ActivityTestRule(LanguageMetadataActivity::class.java)
 
     @Test
     fun returnsMetadata() {

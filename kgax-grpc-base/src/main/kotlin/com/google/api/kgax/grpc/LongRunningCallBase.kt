@@ -16,47 +16,33 @@
 
 package com.google.api.kgax.grpc
 
-import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.ListeningExecutorService
 import com.google.protobuf.MessageLite
-import java.util.concurrent.Callable
-import java.util.concurrent.Executor
+import kotlinx.coroutines.Deferred
 
 /** Resolves long running operations. */
 abstract class LongRunningCallBase<T : MessageLite, OpT>(
-    private val future: ListenableFuture<CallResult<OpT>>,
-    private val responseType: Class<T>,
-    private val executor: ListeningExecutorService
+    private val deferred: Deferred<CallResult<OpT>>,
+    private val responseType: Class<T>
 ) {
     /** the underlying operation (null until the operation has completed) */
     var operation: OpT? = null
         protected set
 
     /** If the operation is done */
-    val isDone = future.isDone
+    val isDone = {
+        val op = operation
+        if (op != null) {
+            isOperationDone(op)
+        } else {
+            false
+        }
+    }
 
-    /** Block until the operation has been completed. */
-    fun get(): CallResult<T> = asFuture().get()
-
-    /** Add a [callback] that will be run on the provided [executor] when the CallResult is available */
-    fun on(executor: Executor, callback: Callback<T>.() -> Unit) =
-        asFuture().on(executor, callback)
-
-    /** Get a future that will resolve when the operation has been completed. */
-    fun asFuture(): FutureCall<T> = executor.submit(Callable<CallResult<T>> {
-        val metadata = wait(future)
-
-        CallResult(
-            parse(operation!!, responseType),
-            metadata ?: ResponseMetadata()
-        )
-    })
-
-    /** Block until the operation is complete */
-    private fun wait(future: ListenableFuture<CallResult<OpT>>): ResponseMetadata? {
+    /** Wait until the operation has been completed. */
+    suspend fun await(): CallResult<T> {
         var metadata: ResponseMetadata? = null
 
-        operation = future.get().body
+        operation = deferred.await().body
         while (!isOperationDone(operation!!)) {
             try {
                 // try again
@@ -70,10 +56,13 @@ abstract class LongRunningCallBase<T : MessageLite, OpT>(
             }
         }
 
-        return metadata
+        return CallResult(
+            parse(operation!!, responseType),
+            metadata ?: ResponseMetadata()
+        )
     }
 
+    protected abstract suspend fun nextOperation(op: OpT): CallResult<OpT>
     protected abstract fun isOperationDone(op: OpT): Boolean
-    protected abstract fun nextOperation(op: OpT): CallResult<OpT>
     protected abstract fun parse(operation: OpT, type: Class<T>): T
 }
