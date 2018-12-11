@@ -17,8 +17,7 @@
 package com.google.api.kgax.examples.grpc
 
 import android.os.Bundle
-import android.support.v7.app.AppCompatActivity
-import android.widget.TextView
+import android.support.test.espresso.idling.CountingIdlingResource
 import com.google.api.kgax.grpc.StubFactory
 import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.Document
@@ -31,14 +30,16 @@ import kotlinx.coroutines.launch
  * Kotlin example showcasing request & response metadata using KGax with gRPC and the
  * Google Natural Language API.
  */
-class LanguageMetadataActivity : AppCompatActivity() {
+class LanguageMetadataActivity : AbstractExampleActivity<LanguageServiceGrpc.LanguageServiceFutureStub>(
+    CountingIdlingResource("LanguageMetadata")
+) {
 
-    private val factory = StubFactory(
+    override val factory = StubFactory(
         LanguageServiceGrpc.LanguageServiceFutureStub::class,
         "language.googleapis.com"
     )
 
-    private val stub by lazy {
+    override val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
             factory.fromServiceAccount(
                 it,
@@ -49,9 +50,6 @@ class LanguageMetadataActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        val resultText: TextView = findViewById(R.id.result_text)
 
         // call the api
         GlobalScope.launch(Dispatchers.Main) {
@@ -70,17 +68,11 @@ class LanguageMetadataActivity : AppCompatActivity() {
             }
 
             // stringify the metadata
-            resultText.text = metadata.keys().joinToString("\n") { key ->
+            val text = metadata.keys().joinToString("\n") { key ->
                 val value = metadata.getAll(key)?.joinToString(", ")
                 "$key=[$value]"
             }
+            updateUIWithExampleResult(text)
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-
-        // clean up
-        factory.shutdown()
     }
 }

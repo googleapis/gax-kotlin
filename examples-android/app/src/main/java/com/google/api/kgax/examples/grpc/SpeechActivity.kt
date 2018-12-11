@@ -17,9 +17,8 @@
 package com.google.api.kgax.examples.grpc
 
 import android.os.Bundle
-import android.support.v7.app.AppCompatActivity
+import android.support.test.espresso.idling.CountingIdlingResource
 import android.util.Log
-import android.widget.TextView
 import com.google.api.kgax.grpc.StubFactory
 import com.google.api.kgax.grpc.executeLongRunning
 import com.google.cloud.speech.v1.LongRunningRecognizeRequest
@@ -38,13 +37,15 @@ private const val TAG = "APITest"
 /**
  * Kotlin example showcasing long running operations using KGax with gRPC and the Google Speech API.
  */
-class SpeechActivity : AppCompatActivity() {
+class SpeechActivity : AbstractExampleActivity<SpeechGrpc.SpeechFutureStub>(
+    CountingIdlingResource("Speech")
+) {
 
-    private val factory = StubFactory(
+    override val factory = StubFactory(
         SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com"
     )
 
-    private val stub by lazy {
+    override val stub by lazy {
         applicationContext.resources.openRawResource(R.raw.sa).use {
             factory.fromServiceAccount(
                 it,
@@ -55,9 +56,6 @@ class SpeechActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        val resultText: TextView = findViewById(R.id.result_text)
 
         // get audio
         val audioData = applicationContext.resources.openRawResource(R.raw.audio).use {
@@ -87,14 +85,7 @@ class SpeechActivity : AppCompatActivity() {
             val (response, _) = lro.await()
 
             Log.i(TAG, "Operation completed: ${lro.operation?.name}")
-            resultText.text = response.toString()
+            updateUIWithExampleResult(response.toString())
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-
-        // clean up
-        factory.shutdown()
     }
 }
