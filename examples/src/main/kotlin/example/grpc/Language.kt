@@ -47,13 +47,12 @@ fun languageExample(credentials: String) = runBlocking {
     // call the API
     val response = stub.execute {
         it.analyzeEntities(
-            AnalyzeEntitiesRequest.newBuilder()
-                .setDocument(
-                    Document.newBuilder()
-                        .setContent("Hi there Joe")
-                        .setType(Document.Type.PLAIN_TEXT)
-                        .build()
-                ).build()
+            AnalyzeEntitiesRequest.newBuilder().apply {
+                document = Document.newBuilder().apply {
+                    content = "Hi there Joe"
+                    type = Document.Type.PLAIN_TEXT
+                }.build()
+            }.build()
         )
     }
 

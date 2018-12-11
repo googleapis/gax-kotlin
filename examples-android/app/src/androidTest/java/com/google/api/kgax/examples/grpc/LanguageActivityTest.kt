@@ -30,17 +30,16 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 @LargeTest
-class FutureActivityTest {
+class LanguageActivityTest {
 
     @Rule
     @JvmField
-    val rule: ActivityTestRule<FutureActivity> =
-            ActivityTestRule(FutureActivity::class.java)
+    val rule: ActivityTestRule<LanguageActivity> =
+        ActivityTestRule(LanguageActivity::class.java)
 
     @Test
     fun returnsIdentifiedEntity() {
         onView(withId(R.id.result_text))
-                .check(matches(withText(containsString("type: PERSON"))))
+            .check(matches(withText(containsString("type: PERSON"))))
     }
-
 }

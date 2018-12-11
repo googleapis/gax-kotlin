@@ -114,7 +114,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         context: String = "",
         method: (T) -> ListenableFuture<RespT>
     ): CallResult<RespT> {
-        val retryContext = RetryContext(context)
+        var retryContext = RetryContext(context)
         val stub = stubWithContext()
 
         while (true) {
@@ -124,6 +124,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             } catch (t: Throwable) {
                 val retryAfter = options.retry.retryAfter(t, retryContext)
                 if (retryAfter != null) {
+                    retryContext = retryContext.next()
                     delay(retryAfter)
                 } else {
                     throw t

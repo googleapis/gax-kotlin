@@ -16,27 +16,23 @@
 
 package com.google.api.kgax.examples.grpc
 
-import android.os.AsyncTask
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.widget.TextView
+import com.google.api.kgax.grpc.StubFactory
 import com.google.cloud.language.v1.AnalyzeEntitiesRequest
-import com.google.cloud.language.v1.AnalyzeEntitiesResponse
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
-import com.google.api.kgax.grpc.GrpcClientStub
-import com.google.api.kgax.grpc.StubFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 /**
- * Kotlin example using KGax with gRPC.
- *
- * This is the same as [FutureActivity], but shows the use of a blocking stub
- * rather than a future based stub (futures are generally recommended).
+ * Kotlin example using KGax with gRPC and the Google Natural Language API.
  */
-class MainActivity : AppCompatActivity() {
-
+class LanguageActivity : AppCompatActivity() {
     private val factory = StubFactory(
-        LanguageServiceGrpc.LanguageServiceBlockingStub::class,
+        LanguageServiceGrpc.LanguageServiceFutureStub::class,
         "language.googleapis.com"
     )
 
@@ -56,7 +52,19 @@ class MainActivity : AppCompatActivity() {
         val resultText: TextView = findViewById(R.id.result_text)
 
         // call the api
-        ApiTestTask(stub) { resultText.text = it }.execute()
+        GlobalScope.launch(Dispatchers.Main) {
+            val response = stub.execute {
+                it.analyzeEntities(
+                    AnalyzeEntitiesRequest.newBuilder().apply {
+                        document = Document.newBuilder().apply {
+                            content = "Hi there Joe"
+                            type = Document.Type.PLAIN_TEXT
+                        }.build()
+                    }.build()
+                )
+            }
+            resultText.text = response.body.toString()
+        }
     }
 
     override fun onDestroy() {
@@ -64,30 +72,5 @@ class MainActivity : AppCompatActivity() {
 
         // clean up
         factory.shutdown()
-    }
-
-    private class ApiTestTask(
-        val stub: GrpcClientStub<LanguageServiceGrpc.LanguageServiceBlockingStub>,
-        val onResult: (String) -> Unit
-    ) : AsyncTask<Unit, Unit, AnalyzeEntitiesResponse>() {
-        override fun doInBackground(vararg params: Unit): AnalyzeEntitiesResponse {
-            val response = stub.executeBlocking {
-                it.analyzeEntities(
-                    AnalyzeEntitiesRequest.newBuilder()
-                        .setDocument(
-                            Document.newBuilder()
-                                .setContent("Hi there Joe")
-                                .setType(Document.Type.PLAIN_TEXT)
-                                .build()
-                        )
-                        .build()
-                )
-            }
-            return response.body
-        }
-
-        override fun onPostExecute(result: AnalyzeEntitiesResponse) {
-            onResult("The API says: $result")
-        }
     }
 }

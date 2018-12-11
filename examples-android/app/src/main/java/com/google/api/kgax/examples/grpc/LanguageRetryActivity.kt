@@ -16,27 +16,25 @@
 
 package com.google.api.kgax.examples.grpc
 
-import android.os.AsyncTask
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.widget.TextView
-import com.google.cloud.language.v1.AnalyzeEntitiesRequest
-import com.google.cloud.language.v1.AnalyzeEntitiesResponse
-import com.google.cloud.language.v1.Document
-import com.google.cloud.language.v1.LanguageServiceGrpc
 import com.google.api.kgax.Retry
 import com.google.api.kgax.RetryContext
-import com.google.api.kgax.grpc.GrpcClientStub
 import com.google.api.kgax.grpc.StubFactory
+import com.google.cloud.language.v1.AnalyzeEntitiesRequest
+import com.google.cloud.language.v1.Document
+import com.google.cloud.language.v1.LanguageServiceGrpc
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 /**
- * Kotlin example using KGax with gRPC.
- *
- * This is the same as [MainActivity], but shows the use of a future based stub
- * rather than a blocking stub.
+ * Kotlin example showcasing client side retries using KGax with gRPC and the
+ * Google Natural Language API.
  */
-class RetryActivity : AppCompatActivity() {
+class LanguageRetryActivity : AppCompatActivity() {
     private val factory = StubFactory(
         LanguageServiceGrpc.LanguageServiceFutureStub::class,
         "language.googleapis.com"
@@ -58,7 +56,22 @@ class RetryActivity : AppCompatActivity() {
         val resultText: TextView = findViewById(R.id.result_text)
 
         // call the api
-        ApiTestTask(stub) { resultText.text = it }.execute()
+        GlobalScope.launch(Dispatchers.Main) {
+            val response = stub.prepare {
+                withRetry(RetryForever)
+            }.execute { it ->
+                it.analyzeEntities(
+                    AnalyzeEntitiesRequest.newBuilder().apply {
+                        document = Document.newBuilder().apply {
+                            content = "Hi there Joe"
+                            type = Document.Type.PLAIN_TEXT
+                        }.build()
+                    }.build()
+                )
+            }
+
+            resultText.text = response.body.toString()
+        }
     }
 
     override fun onDestroy() {
@@ -66,34 +79,6 @@ class RetryActivity : AppCompatActivity() {
 
         // clean up
         factory.shutdown()
-    }
-
-    private class ApiTestTask(
-        val stub: GrpcClientStub<LanguageServiceGrpc.LanguageServiceFutureStub>,
-        val onResult: (String) -> Unit
-    ) : AsyncTask<Unit, Unit, AnalyzeEntitiesResponse>() {
-        override fun doInBackground(vararg params: Unit): AnalyzeEntitiesResponse {
-            val response = stub.prepare {
-                withRetry(RetryForever)
-            }.executeFuture { it ->
-                it.analyzeEntities(
-                    AnalyzeEntitiesRequest.newBuilder()
-                        .setDocument(
-                            Document.newBuilder()
-                                .setContent("Hi there Joe")
-                                .setType(Document.Type.PLAIN_TEXT)
-                                .build()
-                        )
-                        .build()
-                )
-            }
-            val (body, _) = response.get()
-            return body
-        }
-
-        override fun onPostExecute(result: AnalyzeEntitiesResponse) {
-            onResult("The API says: $result")
-        }
     }
 }
 

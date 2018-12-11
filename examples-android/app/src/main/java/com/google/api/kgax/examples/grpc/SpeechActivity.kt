@@ -16,12 +16,10 @@
 
 package com.google.api.kgax.examples.grpc
 
-import android.os.AsyncTask
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.widget.TextView
-import com.google.api.kgax.grpc.GrpcClientStub
 import com.google.api.kgax.grpc.StubFactory
 import com.google.api.kgax.grpc.executeLongRunning
 import com.google.cloud.speech.v1.LongRunningRecognizeRequest
@@ -31,13 +29,16 @@ import com.google.cloud.speech.v1.RecognitionConfig
 import com.google.cloud.speech.v1.SpeechGrpc
 import com.google.common.io.ByteStreams
 import com.google.protobuf.ByteString
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 private const val TAG = "APITest"
 
 /**
- * Kotlin example showcasing LRO using KGax with gRPC.
+ * Kotlin example showcasing long running operations using KGax with gRPC and the Google Speech API.
  */
-class LROActivity : AppCompatActivity() {
+class SpeechActivity : AppCompatActivity() {
 
     private val factory = StubFactory(
         SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com"
@@ -59,12 +60,35 @@ class LROActivity : AppCompatActivity() {
         val resultText: TextView = findViewById(R.id.result_text)
 
         // get audio
-        val audio = applicationContext.resources.openRawResource(R.raw.audio).use {
+        val audioData = applicationContext.resources.openRawResource(R.raw.audio).use {
             ByteString.copyFrom(ByteStreams.toByteArray(it))
         }
 
         // call the api
-        ApiTestTask(stub, audio) { resultText.text = it }.execute()
+        GlobalScope.launch(Dispatchers.Main) {
+            // execute a long running operation
+            val lro = stub.executeLongRunning(LongRunningRecognizeResponse::class.java) {
+                it.longRunningRecognize(
+                    LongRunningRecognizeRequest.newBuilder().apply {
+                        audio = RecognitionAudio.newBuilder().apply {
+                            content = audioData
+                        }.build()
+                        config = RecognitionConfig.newBuilder().apply {
+                            languageCode = "en-US"
+                            encoding = RecognitionConfig.AudioEncoding.LINEAR16
+                            sampleRateHertz = 16000
+                        }.build()
+                    }.build()
+                )
+            }
+
+            // wait for the response to complete
+            Log.i(TAG, "Waiting for long running operation...")
+            val (response, _) = lro.await()
+
+            Log.i(TAG, "Operation completed: ${lro.operation?.name}")
+            resultText.text = response.toString()
+        }
     }
 
     override fun onDestroy() {
@@ -72,44 +96,5 @@ class LROActivity : AppCompatActivity() {
 
         // clean up
         factory.shutdown()
-    }
-
-    private class ApiTestTask(
-        val stub: GrpcClientStub<SpeechGrpc.SpeechFutureStub>,
-        val audio: ByteString,
-        val onResult: (String) -> Unit
-    ) : AsyncTask<Unit, Unit, LongRunningRecognizeResponse>() {
-        override fun doInBackground(vararg params: Unit): LongRunningRecognizeResponse {
-            // execute a long running operation
-            val lro = stub.executeLongRunning(LongRunningRecognizeResponse::class.java) {
-                it.longRunningRecognize(
-                    LongRunningRecognizeRequest.newBuilder()
-                        .setAudio(
-                            RecognitionAudio.newBuilder()
-                                .setContent(audio)
-                                .build()
-                        )
-                        .setConfig(
-                            RecognitionConfig.newBuilder()
-                                .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
-                                .setSampleRateHertz(16000)
-                                .setLanguageCode("en-US")
-                                .build()
-                        )
-                        .build()
-                )
-            }
-
-            // wait for the response to complete
-            Log.i(TAG, "Waiting for long running operation...")
-            val (response, _) = lro.get()
-
-            Log.i(TAG, "Operation completed: ${lro.operation?.name}")
-            return response
-        }
-
-        override fun onPostExecute(result: LongRunningRecognizeResponse?) {
-            onResult("The API says: $result")
-        }
     }
 }

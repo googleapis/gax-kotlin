@@ -50,27 +50,23 @@ fun speechExample(credentials: String) = runBlocking {
     }
 
     // get some audio to use
-    val audio = Main::class.java.getResourceAsStream("/audio.raw").use {
+    val audioData = Main::class.java.getResourceAsStream("/audio.raw").use {
         ByteString.copyFrom(ByteStreams.toByteArray(it))
     }
 
     // call the API
     val lro = stub.executeLongRunning(LongRunningRecognizeResponse::class.java) {
         it.longRunningRecognize(
-            LongRunningRecognizeRequest.newBuilder()
-                .setAudio(
-                    RecognitionAudio.newBuilder()
-                        .setContent(audio)
-                        .build()
-                )
-                .setConfig(
-                    RecognitionConfig.newBuilder()
-                        .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
-                        .setSampleRateHertz(16000)
-                        .setLanguageCode("en-US")
-                        .build()
-                )
-                .build()
+            LongRunningRecognizeRequest.newBuilder().apply {
+                audio = RecognitionAudio.newBuilder().apply {
+                    content = audioData
+                }.build()
+                config = RecognitionConfig.newBuilder().apply {
+                    languageCode = "en-US"
+                    encoding = RecognitionConfig.AudioEncoding.LINEAR16
+                    sampleRateHertz = 16000
+                }.build()
+            }.build()
         )
     }
 
