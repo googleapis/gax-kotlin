@@ -115,10 +115,10 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         method: (T) -> ListenableFuture<RespT>
     ): CallResult<RespT> {
         var retryContext = RetryContext(context)
-        val stub = stubWithContext()
 
         while (true) {
             try {
+                val stub = stubWithContext()
                 val result = method(stub).await()
                 return CallResult(result, stub.context.responseMetadata)
             } catch (t: Throwable) {
