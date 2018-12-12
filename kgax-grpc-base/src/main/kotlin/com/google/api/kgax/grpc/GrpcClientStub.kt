@@ -169,11 +169,11 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
 
         var canRetry = true
         var completed = false
+        lateinit var requestWriter: Job
 
         // start function
         fun start(retryContext: RetryContext, isRetry: Boolean = false) {
             val stub = stubWithContext()
-            var requestWriter: Job? = null
 
             // invoke method
             val requestObserver = method(stub)(object : StreamObserver<RespT> {
@@ -196,7 +196,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
 
                     responseChannel.close(t)
                     requestChannel.close(t)
-                    runBlocking { requestWriter?.join() }
+                    runBlocking { requestWriter.join() }
                 }
 
                 override fun onCompleted() {
@@ -205,7 +205,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
 
                     responseChannel.close()
                     requestChannel.close()
-                    runBlocking { requestWriter?.join() }
+                    runBlocking { requestWriter.join() }
                 }
             })
 
@@ -279,11 +279,11 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
 
         var completed = false
         var canRetry = true
+        lateinit var requestWriter: Job
 
         // start function
         fun start(retryContext: RetryContext, isRetry: Boolean = false) {
             val stub = stubWithContext()
-            var requestWriter: Job? = null
 
             // invoke method
             val requestObserver = method(stub)(object : StreamObserver<RespT> {
@@ -306,7 +306,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
 
                     deferredResponse.completeExceptionally(t)
                     requestChannel.close(t)
-                    runBlocking { requestWriter?.join() }
+                    runBlocking { requestWriter.join() }
                 }
 
                 override fun onCompleted() {
@@ -314,7 +314,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                     completed = true
 
                     requestChannel.close()
-                    runBlocking { requestWriter?.join() }
+                    runBlocking { requestWriter.join() }
                 }
             })
 
@@ -653,4 +653,10 @@ suspend fun <ReqT, RespT, ElementT> pager(
     initialRequest: () -> ReqT,
     nextRequest: (ReqT, String) -> ReqT,
     nextPage: (RespT) -> PageWithMetadata<ElementT>
-): ReceiveChannel<PageWithMetadata<ElementT>> = createPager(method, initialRequest, nextRequest, nextPage)
+): ReceiveChannel<PageWithMetadata<ElementT>> = createPager(
+    method = method,
+    initialRequest = initialRequest,
+    nextRequest = nextRequest,
+    nextPage = nextPage,
+    hasNextPage = { p -> p.elements.any() && p.token.isNotEmpty() }
+)

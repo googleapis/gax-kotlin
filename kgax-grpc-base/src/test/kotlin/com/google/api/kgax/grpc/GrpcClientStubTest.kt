@@ -37,11 +37,13 @@ import io.grpc.ClientCall
 import io.grpc.ClientInterceptor
 import io.grpc.stub.AbstractStub
 import io.grpc.stub.StreamObserver
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.map
 import kotlinx.coroutines.channels.toList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import kotlin.test.BeforeTest
@@ -51,6 +53,9 @@ import kotlin.test.fail
 
 private fun string(value: String): StringValue = StringValue.newBuilder().setValue(value).build()
 private fun int32(value: Int): Int32Value = Int32Value.newBuilder().setValue(value).build()
+
+private data class PagedRequestType(val query: String, val token: String? = null)
+private typealias PagedResponseType = PageWithMetadata<Int>
 
 @ExperimentalCoroutinesApi
 class GrpcClientStubTest {
@@ -747,6 +752,48 @@ class GrpcClientStubTest {
         assertThat(result.responses.isClosedForReceive).isTrue()
 
         assertThat(timesExecuted).isEqualTo(1)
+    }
+
+    @Test
+    fun `can be paged`() = runBlocking<Unit> {
+        val request = PagedRequestType("1")
+        val metadata = List(3) { ResponseMetadata() }
+
+        suspend fun method(request: PagedRequestType) = withContext(Dispatchers.Default) {
+            when (request.token) {
+                null -> PagedResponseType(listOf(1, 2), "first", metadata[0])
+                "first" -> PagedResponseType(listOf(3, 4), "second", metadata[1])
+                else -> PagedResponseType(listOf(5, 6), "", metadata[2])
+            }
+        }
+
+        var count = 0
+        val pager =
+            pager(
+                method = ::method,
+                initialRequest = {
+                    request
+                },
+                nextRequest = { request, token ->
+                    assertThat(request).isEqualTo(request)
+                    PagedRequestType(request.query, token)
+                },
+                nextPage = { response ->
+                    count++
+                    PagedResponseType(response.elements, response.token, response.metadata)
+                }
+            )
+
+        val results = mutableListOf<Int>()
+        val resultMetadata = mutableListOf<ResponseMetadata>()
+        for (page in pager) {
+            for (entry in page.elements) {
+                results.add(entry)
+            }
+            resultMetadata.add(page.metadata)
+        }
+        assertThat(results).containsExactly(1, 2, 3, 4, 5, 6).inOrder()
+        assertThat(resultMetadata).containsExactlyElementsIn(metadata).inOrder()
     }
 
     @Test

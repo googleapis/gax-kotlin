@@ -22,15 +22,15 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlin.test.Test
 
+private data class RequestType(val query: Int, val token: String? = null)
+private data class ResponseType(val items: List<String>, val token: String? = null)
+
+private data class TestPage(
+    override val elements: Iterable<String>,
+    override val token: String? = null
+) : Page<String, String>
+
 class PagerTest {
-
-    data class RequestType(val query: Int, val token: String? = null)
-    data class ResponseType(val items: List<String>, val token: String? = null)
-
-    data class TestPage(
-        override val elements: Iterable<String>,
-        override val token: String? = null
-    ) : Page<String, String>
 
     @Test
     fun `Pages through data`() = runBlocking<Unit> {

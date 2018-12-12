@@ -39,7 +39,8 @@ suspend fun <ReqT, RespT, ElementT, TokenT, PageT : Page<ElementT, TokenT>> crea
     method: suspend (ReqT) -> RespT,
     initialRequest: () -> ReqT,
     nextRequest: (ReqT, TokenT) -> ReqT,
-    nextPage: (RespT) -> PageT
+    nextPage: (RespT) -> PageT,
+    hasNextPage: (PageT) -> Boolean = { p -> p.elements.any() && p.token != null }
 ): ReceiveChannel<PageT> = coroutineScope {
     produce(capacity = Channel.UNLIMITED) {
         val original = initialRequest()
@@ -51,8 +52,7 @@ suspend fun <ReqT, RespT, ElementT, TokenT, PageT : Page<ElementT, TokenT>> crea
             send(page)
 
             // get next request
-            val nextToken = if (page.elements.any()) page.token else null
-            request = if (nextToken != null) nextRequest(original, nextToken) else null
+            request = if (hasNextPage(page)) nextRequest(original, page.token!!) else null
         }
     }
 }
