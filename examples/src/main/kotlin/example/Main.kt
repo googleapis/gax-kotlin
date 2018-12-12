@@ -16,6 +16,7 @@
 package example
 
 import example.grpc.languageExample
+import example.grpc.loggingExample
 import example.grpc.speechExample
 import example.grpc.speechStreamingExample
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -26,7 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
  * Run the examples using your service account as follows:
  *
  * ```
- * $ CREDENTIALS=<path_to_your_service_account.json> ./gradlew run --args language
+ * $ CREDENTIALS=<path_to_your_service_account.json> PROJECT=<your_gcp_project_id> ./gradlew run --args language
  * ```
  */
 class Main {
@@ -40,6 +41,7 @@ class Main {
                     ?: throw RuntimeException("You must set the CREDENTIALS environment variable to run this example")
                 when (example) {
                     "language" -> languageExample(credentials)
+                    "logging" -> loggingExample(credentials)
                     "speech" -> speechExample(credentials)
                     "transcribe" -> speechStreamingExample(credentials)
                     else -> usage()
@@ -66,7 +68,8 @@ class Main {
                 |Example:
                 |Run the following command to start the Natural Language example:
                 |$ ./gradlew run --args language
-                """.trimMargin())
+                """.trimMargin()
+            )
             System.exit(1)
         }
     }

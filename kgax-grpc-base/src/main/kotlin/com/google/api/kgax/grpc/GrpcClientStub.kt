@@ -20,6 +20,7 @@ import com.google.api.kgax.NoRetry
 import com.google.api.kgax.Page
 import com.google.api.kgax.Retry
 import com.google.api.kgax.RetryContext
+import com.google.api.kgax.createPager
 import com.google.auth.oauth2.AccessToken
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.common.util.concurrent.ListenableFuture
@@ -587,13 +588,6 @@ internal fun clientCallOptions(init: ClientCallOptions.Builder.() -> Unit = {}):
 /** Result of the call with the response [body] associated [metadata]. */
 data class CallResult<RespT>(val body: RespT, val metadata: ResponseMetadata)
 
-/** Result of a call with paging */
-data class PageResult<T>(
-    override val elements: Iterable<T>,
-    override val token: String,
-    override val metadata: ResponseMetadata
-) : Page<T>
-
 /**
  * Result of a bi-directional streaming call including [requests] and [responses] streams.
  */
@@ -616,3 +610,47 @@ class ClientStreamingCall<ReqT, RespT>(
 class ServerStreamingCall<RespT>(
     val responses: ReceiveChannel<RespT>
 )
+
+/** Result of a call with paging */
+data class PageWithMetadata<T>(
+    override val elements: Iterable<T>,
+    override val token: String,
+    val metadata: ResponseMetadata
+) : Page<T, String>
+
+/**
+ * Create a stream of [Page]s.
+ *
+ * ```
+ * val pager = pager<ListLogEntriesRequest, ListLogEntriesResponse, LogEntry> {
+ *      method = stub::listLogEntries
+ *      initialRequest = {
+ *          ListLogEntriesRequest.newBuilder()
+ *                  .addResourceNames(project)
+ *                  .setFilter("logName=$log")
+ *                  .setPageSize(10)
+ *                  .build()
+ *      }
+ *      nextRequest = { request, token ->
+ *          request.toBuilder().setPageToken(token).build()
+ *      }
+ *      nextPage = { response ->
+ *          PageResult(response.entriesList, response.nextPageToken)
+ *      }
+ *  }
+ *
+ *  // go through all pages
+ *  for (page in pager) {
+ *      for (entry in page.elements) {
+ *          println(entry.textPayload)
+ *      }
+ *  }
+ * ```
+ */
+@ExperimentalCoroutinesApi
+suspend fun <ReqT, RespT, ElementT> pager(
+    method: suspend (ReqT) -> RespT,
+    initialRequest: () -> ReqT,
+    nextRequest: (ReqT, String) -> ReqT,
+    nextPage: (RespT) -> PageWithMetadata<ElementT>
+): ReceiveChannel<PageWithMetadata<ElementT>> = createPager(method, initialRequest, nextRequest, nextPage)
