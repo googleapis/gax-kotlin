@@ -17,24 +17,26 @@
 package com.google.api.kgax
 
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlin.test.Test
+
+private data class RequestType(val query: Int, val token: String? = null)
+private data class ResponseType(val items: List<String>, val token: String? = null)
+
+private data class TestPage(
+    override val elements: Iterable<String>,
+    override val token: String? = null
+) : Page<String, String>
 
 class PagerTest {
 
-    data class RequestType(val query: Int, val token: String? = null)
-    data class ResponseType(val items: List<String>, val token: String? = null)
-
-    data class TestPage(
-        override val elements: Iterable<String>,
-        override val token: String? = null,
-        override val metadata: String? = null
-    ) : Page<String>
-
     @Test
-    fun `Pages through data`() {
+    fun `Pages through data`() = runBlocking<Unit> {
         val request = RequestType(22)
-        fun method(request: RequestType): ResponseType {
-            return when (request.token) {
+        suspend fun method(request: RequestType) = withContext(Dispatchers.Default) {
+            when (request.token) {
                 null -> ResponseType(listOf("one", "two"), "first")
                 "first" -> ResponseType(listOf("three", "four"), "second")
                 else -> ResponseType(listOf("five", "six"))
@@ -43,75 +45,80 @@ class PagerTest {
 
         var count = 0
         val pager =
-            pager<RequestType, ResponseType, String> {
-                method = ::method
+            createPager(
+                method = ::method,
                 initialRequest = {
                     request
-                }
+                },
                 nextRequest = { request, token ->
                     assertThat(request).isEqualTo(request)
                     RequestType(request.query, token)
-                }
+                },
                 nextPage = { response ->
                     count++
-                    TestPage(response.items, response.token, "extra_$count")
-                }
-            }
-
-        val results = mutableListOf<String>()
-        for ((idx, page) in pager.withIndex()) {
-            for (entry in page.elements) {
-                results.add(entry)
-            }
-            assertThat(page.metadata).isEqualTo("extra_${idx + 1}")
-        }
-        assertThat(results).containsExactly("one", "two", "three", "four", "five", "six")
-    }
-
-    @Test
-    fun `Ends when no data`() {
-        val pager =
-            pager<RequestType, ResponseType, String> {
-                method = { ResponseType(listOf()) }
-                initialRequest = {
-                    RequestType(2)
-                }
-                nextRequest = { request, token ->
-                    RequestType(request.query, token)
-                }
-                nextPage = { response ->
                     TestPage(response.items, response.token)
                 }
-            }
+            )
 
         val results = mutableListOf<String>()
         for (page in pager) {
-            page.elements.forEach { results.add(it) }
-            assertThat(page.metadata).isNull()
+            for (entry in page.elements) {
+                results.add(entry)
+            }
+        }
+        assertThat(results).containsExactly("one", "two", "three", "four", "five", "six").inOrder()
+    }
+
+    @Test
+    fun `Ends when no data`() = runBlocking<Unit> {
+        suspend fun method(request: RequestType) = withContext(Dispatchers.Default) { ResponseType(listOf()) }
+
+        val pager =
+            createPager(
+                method = ::method,
+                initialRequest = {
+                    RequestType(2)
+                },
+                nextRequest = { request, token ->
+                    RequestType(request.query, token)
+                },
+                nextPage = { response ->
+                    TestPage(response.items, response.token)
+                }
+            )
+
+        val results = mutableListOf<String>()
+        for (page in pager) {
+            for (entry in page.elements) {
+                results.add(entry)
+            }
         }
         assertThat(results).isEmpty()
     }
 
     @Test
-    fun `Ends when no token`() {
+    fun `Ends when no token`() = runBlocking<Unit> {
+        suspend fun method(request: RequestType) = withContext(Dispatchers.Default) { ResponseType(listOf("one")) }
+
         val pager =
-            pager<RequestType, ResponseType, String> {
-                method = { ResponseType(listOf("one")) }
+            createPager(
+                method = ::method,
                 initialRequest = {
                     RequestType(2)
-                }
+                },
                 nextRequest = { request, token ->
                     RequestType(request.query, token)
-                }
+                },
                 nextPage = { response ->
                     TestPage(response.items)
                 }
-            }
+            )
 
         val results = mutableListOf<String>()
         for (page in pager) {
-            page.elements.forEach { results.add(it) }
-            assertThat(page.metadata).isNull()
+            for (entry in page.elements) {
+                results.add(entry)
+            }
         }
         assertThat(results).containsExactly("one")
     }
