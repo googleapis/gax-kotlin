@@ -24,10 +24,12 @@ import com.google.protobuf.Int32Value
 import com.google.protobuf.StringValue
 import com.nhaarman.mockito_kotlin.any
 import com.nhaarman.mockito_kotlin.check
+import com.nhaarman.mockito_kotlin.doReturn
 import com.nhaarman.mockito_kotlin.eq
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.never
 import com.nhaarman.mockito_kotlin.reset
+import com.nhaarman.mockito_kotlin.times
 import com.nhaarman.mockito_kotlin.verify
 import com.nhaarman.mockito_kotlin.whenever
 import io.grpc.CallCredentials
@@ -794,6 +796,27 @@ class GrpcClientStubTest {
         }
         assertThat(results).containsExactly(1, 2, 3, 4, 5, 6).inOrder()
         assertThat(resultMetadata).containsExactlyElementsIn(metadata).inOrder()
+    }
+
+    @Test
+    fun `can get a stub with context`() {
+        val stub: TestStub = mock()
+        whenever(stub.withInterceptors(any())).doReturn(stub)
+        whenever(stub.withOption<ClientCallContext>(any(), any())).doReturn(stub)
+        whenever(stub.withCallCredentials(any())).doReturn(stub)
+
+        val options = ClientCallOptions()
+        val clientStub = GrpcClientStub(stub, options)
+
+        val newStub = clientStub.stubWithContext()
+
+        verify(stub).withInterceptors(check { assertThat(it).isInstanceOf(GAXInterceptor::class.java) })
+        verify(stub).withOption<ClientCallContext>(eq(ClientCallContext.KEY), check {
+            assertThat(it).isInstanceOf(ClientCallContext::class.java)
+        })
+        verify(stub, never()).withCallCredentials(any())
+
+        assertThat(newStub).isEqualTo(stub)
     }
 
     @Test
