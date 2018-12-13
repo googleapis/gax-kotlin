@@ -635,7 +635,7 @@ data class PageWithMetadata<T>(
  *          request.toBuilder().setPageToken(token).build()
  *      }
  *      nextPage = { response ->
- *          PageResult(response.entriesList, response.nextPageToken)
+ *          PageWithMetadata(response.entriesList, response.nextPageToken)
  *      }
  *  }
  *
