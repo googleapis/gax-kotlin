@@ -16,11 +16,11 @@
 
 package com.google.api.kgax
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.produce
-import kotlinx.coroutines.coroutineScope
 
 /** Contains the [elements] of a page and a [token] to get the next set of results. */
 interface Page<T, K> {
@@ -33,26 +33,28 @@ interface Page<T, K> {
  * of lambdas. The [nextRequest] lambda is used to transform the initial request to a new request for
  * subsequent pages using the given page token. The [nextPage] lambda is used to extract the result list,
  * next page token, and any other arbitrary metadata after a new page is fetched.
+ *
+ * Note that the "pager" that is created by this method is launched in the [GlobalScope] by default
+ * because it is potentially a long running background operation.
  */
 @ExperimentalCoroutinesApi
-suspend fun <ReqT, RespT, ElementT, TokenT, PageT : Page<ElementT, TokenT>> createPager(
+fun <ReqT, RespT, ElementT, TokenT, PageT : Page<ElementT, TokenT>> createPager(
     method: suspend (ReqT) -> RespT,
     initialRequest: () -> ReqT,
     nextRequest: (ReqT, TokenT) -> ReqT,
     nextPage: (RespT) -> PageT,
-    hasNextPage: (PageT) -> Boolean = { p -> p.elements.any() && p.token != null }
-): ReceiveChannel<PageT> = coroutineScope {
-    produce(capacity = Channel.UNLIMITED) {
-        val original = initialRequest()
+    hasNextPage: (PageT) -> Boolean = { p -> p.elements.any() && p.token != null },
+    scope: CoroutineScope = GlobalScope
+): ReceiveChannel<PageT> = scope.produce {
+    val original = initialRequest()
 
-        // iterate through all requests
-        var request: ReqT? = original
-        while (request != null) {
-            val page = nextPage(method(request))
-            send(page)
+    // iterate through all requests
+    var request: ReqT? = original
+    while (request != null) {
+        val page = nextPage(method(request))
+        channel.send(page)
 
-            // get next request
-            request = if (hasNextPage(page)) nextRequest(original, page.token!!) else null
-        }
+        // get next request
+        request = if (hasNextPage(page)) nextRequest(original, page.token!!) else null
     }
 }

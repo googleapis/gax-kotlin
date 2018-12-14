@@ -46,7 +46,6 @@ base {
     archivesBaseName = "kgax-examples"
 }
 
-
 protobuf {
     protoc {
         artifact = "com.google.protobuf:protoc:${ext["protoc_version"]}"
