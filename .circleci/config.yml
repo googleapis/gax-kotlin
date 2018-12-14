@@ -86,7 +86,6 @@ jobs:
             export CREDENTIALS=/tmp/_key.json
             export PROJECT=$GCLOUD_PROJECT_ID
             ./gradlew examples:run --args language
-            ./gradlew examples:run --args logging
             ./gradlew examples:run --args speech
       - run:
           command: rm /tmp/_key.json
