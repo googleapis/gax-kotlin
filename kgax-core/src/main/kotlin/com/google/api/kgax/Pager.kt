@@ -35,10 +35,11 @@ interface Page<T, K> {
  * next page token, and any other arbitrary metadata after a new page is fetched.
  *
  * Note that the "pager" that is created by this method is launched in the [GlobalScope] by default
- * because it is potentially a long running background operation.
+ * because it is a potentially long running background operation. Fully consuming the stream
+ * will end it.
  */
 @ExperimentalCoroutinesApi
-fun <ReqT, RespT, ElementT, TokenT, PageT : Page<ElementT, TokenT>> createPager(
+suspend fun <ReqT, RespT, ElementT, TokenT, PageT : Page<ElementT, TokenT>> createPager(
     method: suspend (ReqT) -> RespT,
     initialRequest: () -> ReqT,
     nextRequest: (ReqT, TokenT) -> ReqT,
