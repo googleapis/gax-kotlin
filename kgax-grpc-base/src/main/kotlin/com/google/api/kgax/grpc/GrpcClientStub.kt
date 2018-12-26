@@ -27,15 +27,17 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.protobuf.MessageLite
 import io.grpc.CallCredentials
 import io.grpc.ClientInterceptor
+import io.grpc.Status
+import io.grpc.StatusRuntimeException
 import io.grpc.auth.MoreCallCredentials
 import io.grpc.stub.AbstractStub
 import io.grpc.stub.MetadataUtils
 import io.grpc.stub.StreamObserver
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
@@ -122,13 +124,15 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                 val stub = stubWithContext()
                 val result = method(stub).await()
                 return CallResult(result, stub.context.responseMetadata)
-            } catch (t: Throwable) {
-                val retryAfter = options.retry.retryAfter(t, retryContext)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (throwable: Throwable) {
+                val retryAfter = options.retry.retryAfter(throwable, retryContext)
                 if (retryAfter != null) {
                     retryContext = retryContext.next()
                     delay(retryAfter)
                 } else {
-                    throw t
+                    throw throwable
                 }
             }
         }
@@ -138,18 +142,16 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * Execute a bidirectional streaming call. For example:
      *
      * ```
-     * val stream = stub.prepare().executeStreaming { it::myStreamingMethod }
-     *
-     * // process incoming responses
-     * stream.start {
-     *     onNext = { print("response: $it") }
-     *     onError = { print("error: $it") }
-     *     onCompleted = { print("all done!") }
-     * }
+     * val streams = stub.prepare().executeStreaming { it::myStreamingMethod }
      *
      * // send outbound requests
-     * stream.requests.send(...)
-     * stream.requests.send(...)
+     * streams.requests.send(...)
+     * streams.requests.send(...)
+     *
+     * // process incoming responses
+     * for (response in streams.responses) {
+     *     println("response: $response")
+     * }
      * ```
      *
      * The [method] lambda should return a bound method reference on the stub that is provided
@@ -167,82 +169,8 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         val requestChannel = Channel<ReqT>(Channel.UNLIMITED)
         val responseChannel = Channel<RespT>(Channel.UNLIMITED)
 
-        var canRetry = true
-        var completed = false
-        lateinit var requestWriter: Job
-
-        // start function
-        fun start(retryContext: RetryContext, isRetry: Boolean = false) {
-            val stub = stubWithContext()
-
-            // invoke method
-            val requestObserver = method(stub)(object : StreamObserver<RespT> {
-                override fun onNext(value: RespT) {
-                    canRetry = false
-                    runBlocking { responseChannel.send(value) }
-                }
-
-                override fun onError(t: Throwable) {
-                    val retryAfter = if (canRetry) options.retry.retryAfter(t, retryContext) else null
-                    if (retryAfter != null) {
-                        runBlocking {
-                            delay(retryAfter)
-                            start(retryContext.next(), true)
-                        }
-                        return
-                    }
-
-                    completed = true
-
-                    responseChannel.close(t)
-                    requestChannel.close(t)
-                    runBlocking { requestWriter.join() }
-                }
-
-                override fun onCompleted() {
-                    canRetry = false
-                    completed = true
-
-                    responseChannel.close()
-                    requestChannel.close()
-                    runBlocking { requestWriter.join() }
-                }
-            })
-
-            if (!isRetry) {
-                // pipe all requests to the observer
-                requestWriter = GlobalScope.launch {
-                    for (next in requestChannel) {
-                        requestObserver.onNext(next)
-                    }
-                }
-
-                // add shutdown handlers
-                responseChannel.invokeOnClose {
-                    if (!completed && it == null) {
-                        stub.context.call.cancel(
-                            "explicit close() called by client",
-                            StreamingMethodClosedException()
-                        )
-                    }
-                }
-                requestChannel.invokeOnClose {
-                    runBlocking { requestWriter.join() }
-                    requestObserver.onCompleted()
-                }
-            }
-
-            // add and initial requests
-            for (request in options.initialRequests) {
-                runBlocking {
-                    @Suppress("UNCHECKED_CAST")
-                    requestChannel.send(request as ReqT)
-                }
-            }
-        }
-
-        // start now
-        start(RetryContext(context))
+        val invoke = { stub: T, responseStream: StreamObserver<RespT> -> method(stub)(responseStream) }
+        executeStreaming(context, invoke, requestChannel = requestChannel, responseChannel = responseChannel)
 
         StreamingCall(requestChannel, responseChannel)
     }
@@ -251,14 +179,14 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * Execute a call that sends a stream of requests to the server. For example:
      *
      * ```
-     * val stream = stub.prepare().executeClientStreaming { it::myStreamingMethod }
+     * val streams = stub.prepare().executeClientStreaming { it::myStreamingMethod }
      *
      * // send outbound requests
-     * stream.requests.send(...)
-     * stream.requests.send(...)
+     * streams.requests.send(...)
+     * streams.requests.send(...)
      *
-     * // process the response once available
-     * stream.response.get { print("response: $it") }
+     * // process the response when available
+     * print("response: ${streams.response.await()}") }
      * ```
      *
      * The [method] lambda should return a bound method reference on the stub that is provided
@@ -275,77 +203,12 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
     ): ClientStreamingCall<ReqT, RespT> = coroutineScope {
         val requestChannel = Channel<ReqT>(Channel.UNLIMITED)
-        val deferredResponse = CompletableDeferred<RespT>()
+        val response = CompletableDeferred<RespT>()
 
-        var completed = false
-        var canRetry = true
-        lateinit var requestWriter: Job
+        val invoke = { stub: T, responseStream: StreamObserver<RespT> -> method(stub)(responseStream) }
+        executeStreaming(context, invoke, requestChannel = requestChannel, response = response)
 
-        // start function
-        fun start(retryContext: RetryContext, isRetry: Boolean = false) {
-            val stub = stubWithContext()
-
-            // invoke method
-            val requestObserver = method(stub)(object : StreamObserver<RespT> {
-                override fun onNext(value: RespT) {
-                    canRetry = false
-                    deferredResponse.complete(value)
-                }
-
-                override fun onError(t: Throwable) {
-                    val retryAfter = if (canRetry) options.retry.retryAfter(t, retryContext) else null
-                    if (retryAfter != null) {
-                        runBlocking {
-                            delay(retryAfter)
-                            start(retryContext.next(), true)
-                        }
-                        return
-                    }
-
-                    completed = true
-
-                    deferredResponse.completeExceptionally(t)
-                    requestChannel.close(t)
-                    runBlocking { requestWriter.join() }
-                }
-
-                override fun onCompleted() {
-                    canRetry = false
-                    completed = true
-
-                    requestChannel.close()
-                    runBlocking { requestWriter.join() }
-                }
-            })
-
-            if (!isRetry) {
-                // pipe all requests to the observer
-                requestWriter = GlobalScope.launch {
-                    for (next in requestChannel) {
-                        requestObserver.onNext(next)
-                    }
-                }
-
-                // add shutdown handlers
-                requestChannel.invokeOnClose {
-                    runBlocking { requestWriter.join() }
-                    requestObserver.onCompleted()
-                }
-            }
-
-            // add and initial requests
-            for (request in options.initialRequests) {
-                runBlocking {
-                    @Suppress("UNCHECKED_CAST")
-                    requestChannel.send(request as ReqT)
-                }
-            }
-        }
-
-        // start now
-        start(RetryContext(context))
-
-        ClientStreamingCall(requestChannel, deferredResponse)
+        ClientStreamingCall(requestChannel, response)
     }
 
     /**
@@ -353,15 +216,13 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      *
      * ```
      * val request = MyRequest(...)
-     * val stream = stub.prepare().executeServerStreaming { it, observer ->
-     *   it.myStreamingMethod(request, observer)
+     * val streams = stub.prepare().executeServerStreaming { it, observer ->
+     *     it.myStreamingMethod(request, observer)
      * }
      *
      * // process incoming responses
-     * stream.start {
-     *     onNext = { print("response: $it") }
-     *     onError = { print("error: $it") }
-     *     onCompleted = { print("all done!") }
+     * for (response in streams.responses) {
+     *     println("response: $response")
      * }
      * ```
      *
@@ -378,18 +239,51 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     ): ServerStreamingCall<RespT> = coroutineScope {
         val responseChannel = Channel<RespT>(Channel.UNLIMITED)
 
-        var completed = false
+        val invoke: (T, StreamObserver<RespT>) -> StreamObserver<RespT>? = { stub, responseStream ->
+            method(stub, responseStream)
+            null
+        }
+        executeStreaming(context, invoke, responseChannel = responseChannel)
+
+        ServerStreamingCall(responseChannel)
+    }
+
+    @ExperimentalCoroutinesApi
+    private suspend fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
+        context: String,
+        method: (T, StreamObserver<RespT>) -> StreamObserver<ReqT>?,
+        requestChannel: Channel<ReqT>? = null,
+        responseChannel: Channel<RespT>? = null,
+        response: CompletableDeferred<RespT>? = null
+    ) = coroutineScope {
         var canRetry = true
+        var completed = false
+        var cancelled = false
+
+        // these change during a retry
+        lateinit var stub: T
+        var requestObserver: StreamObserver<ReqT>? = null
+
+        // pipe all requests to the observer
+        val requestWriter = requestChannel?.let { channel ->
+            GlobalScope.launch {
+                for (next in channel) {
+                    requestObserver?.onNext(next)
+                }
+            }
+        }
 
         // start function
-        fun start(retryContext: RetryContext, isRetry: Boolean = false) {
-            val stub = stubWithContext()
+        fun start(retryContext: RetryContext) {
+            stub = stubWithContext()
 
             // invoke method
-            method(stub, object : StreamObserver<RespT> {
+            requestObserver = method(stub, object : StreamObserver<RespT> {
                 override fun onNext(value: RespT) {
                     canRetry = false
-                    runBlocking { responseChannel.send(value) }
+
+                    responseChannel?.let { runBlocking { it.send(value) } }
+                    response?.complete(value)
                 }
 
                 override fun onError(t: Throwable) {
@@ -397,32 +291,43 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                     if (retryAfter != null) {
                         runBlocking {
                             delay(retryAfter)
-                            start(retryContext.next(), true)
+                            start(retryContext.next())
                         }
                         return
                     }
 
                     completed = true
+                    cancelled = when {
+                        t is StatusRuntimeException -> t.status.code == Status.Code.CANCELLED
+                        else -> false
+                    }
 
-                    responseChannel.close(t)
+                    if (cancelled) {
+                        responseChannel?.close()
+                    } else {
+                        responseChannel?.close(t)
+                    }
+                    response?.completeExceptionally(t)
+                    requestChannel?.close()
+                    runBlocking { requestWriter?.join() }
                 }
 
                 override fun onCompleted() {
-                    completed = true
                     canRetry = false
+                    completed = true
 
-                    responseChannel.close()
+                    responseChannel?.close()
+                    requestChannel?.close()
+                    runBlocking { requestWriter?.join() }
                 }
             })
 
-            if (!isRetry) {
-                // add shutdown handlers
-                responseChannel.invokeOnClose {
-                    if (!completed && it == null) {
-                        stub.context.call.cancel(
-                            "explicit close() called by client",
-                            StreamingMethodClosedException()
-                        )
+            // add and initial requests
+            if (requestChannel != null) {
+                for (request in options.initialRequests) {
+                    runBlocking {
+                        @Suppress("UNCHECKED_CAST")
+                        requestChannel.send(request as ReqT)
                     }
                 }
             }
@@ -431,7 +336,21 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         // start now
         start(RetryContext(context))
 
-        ServerStreamingCall(responseChannel)
+        // add shutdown handlers
+        responseChannel?.invokeOnClose { error ->
+            if (!completed && error == null) {
+                stub.context.call.cancel(
+                    "explicit close() called by client",
+                    CancellationException()
+                )
+            }
+        }
+        requestChannel?.invokeOnClose {
+            runBlocking { requestWriter?.join() }
+            if (!cancelled) {
+                requestObserver?.onCompleted()
+            }
+        }
     }
 
     /**
@@ -472,9 +391,6 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         return stub
     }
 }
-
-/** Indicates the user explicitly closed the connection */
-class StreamingMethodClosedException : Exception()
 
 /** Get the call context associated with a one time use stub */
 private val <T : AbstractStub<T>> T.context: ClientCallContext

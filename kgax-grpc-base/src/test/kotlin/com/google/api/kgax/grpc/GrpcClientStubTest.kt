@@ -29,7 +29,6 @@ import com.nhaarman.mockito_kotlin.eq
 import com.nhaarman.mockito_kotlin.mock
 import com.nhaarman.mockito_kotlin.never
 import com.nhaarman.mockito_kotlin.reset
-import com.nhaarman.mockito_kotlin.times
 import com.nhaarman.mockito_kotlin.verify
 import com.nhaarman.mockito_kotlin.whenever
 import io.grpc.CallCredentials
@@ -41,13 +40,16 @@ import io.grpc.stub.AbstractStub
 import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.map
 import kotlinx.coroutines.channels.toList
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.IOException
+import java.util.concurrent.CancellationException
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -163,7 +165,7 @@ class GrpcClientStubTest {
     }
 
     @Test
-    fun `Can do a future call`() = runBlocking<Unit> {
+    fun `Can do a deferred call`() = runBlocking<Unit> {
         val stub: TestStub = createTestStubMock()
         val future = SettableFuture.create<StringValue>()
         future.set(string("hi"))
@@ -186,7 +188,7 @@ class GrpcClientStubTest {
     }
 
     @Test(expected = IllegalStateException::class)
-    fun `Throws on a failed future call`() = runBlocking<Unit> {
+    fun `Throws on a failed deferred call`() = runBlocking<Unit> {
         val stub: TestStub = createTestStubMock()
         val future = SettableFuture.create<StringValue>()
         future.setException(IllegalStateException("bad future"))
@@ -214,7 +216,7 @@ class GrpcClientStubTest {
     }
 
     @Test
-    fun `Can retry a future call`() = runBlocking<Unit> {
+    fun `Can retry a deferred call`() = runBlocking<Unit> {
         val stub: TestStub = createTestStubMock()
         val exception = IllegalArgumentException("bad news!")
 
@@ -256,6 +258,31 @@ class GrpcClientStubTest {
 
         assertThat(result.body.value).isEqualTo("hi again")
         assertThat(retry.executed).isTrue()
+    }
+
+    @Test
+    fun `Does not retry a cancelled deferred call`() = runBlocking<Unit> {
+        val stub: TestStub = createTestStubMock()
+
+        val retry = object : Retry {
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? = fail("should not retry")
+        }
+
+        val call = GrpcClientStub(
+            stub, ClientCallOptions(
+                credentials = mock(),
+                retry = retry
+            )
+        )
+
+        val job = Job()
+        launch(job) {
+            call.execute { arg ->
+                job.cancel()
+                SettableFuture.create<StringValue>()
+            }
+        }.join()
+        assertThat(job.isCancelled).isTrue()
     }
 
     @Test
@@ -312,7 +339,7 @@ class GrpcClientStubTest {
         result.responses.cancel()
 
         verify(clientCall).cancel(any(), check {
-            assertThat(it).isInstanceOf(StreamingMethodClosedException::class.java)
+            assertThat(it).isInstanceOf(CancellationException::class.java)
         })
     }
 
@@ -678,7 +705,7 @@ class GrpcClientStubTest {
         result.responses.cancel()
 
         verify(clientCall).cancel(any(), check {
-            assertThat(it).isInstanceOf(StreamingMethodClosedException::class.java)
+            assertThat(it).isInstanceOf(CancellationException::class.java)
         })
     }
 
