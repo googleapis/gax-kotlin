@@ -29,7 +29,9 @@ import com.google.cloud.speech.v1.SpeechGrpc
 import com.google.common.io.ByteStreams
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.coroutines.CoroutineContext
 
 private const val TAG = "APITest"
 
@@ -39,6 +41,9 @@ private const val TAG = "APITest"
 class SpeechActivity : AbstractExampleActivity<SpeechGrpc.SpeechFutureStub>(
     CountingIdlingResource("Speech")
 ) {
+    lateinit var job: Job
+    override val coroutineContext: CoroutineContext
+        get() = Dispatchers.Main + job
 
     override val factory = StubFactory(
         SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com"
@@ -55,6 +60,8 @@ class SpeechActivity : AbstractExampleActivity<SpeechGrpc.SpeechFutureStub>(
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        job = Job()
 
         // get audio
         val audioData = applicationContext.resources.openRawResource(R.raw.audio).use {

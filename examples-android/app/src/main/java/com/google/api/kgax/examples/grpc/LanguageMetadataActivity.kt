@@ -23,7 +23,9 @@ import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Kotlin example showcasing request & response metadata using KGax with gRPC and the
@@ -32,6 +34,9 @@ import kotlinx.coroutines.launch
 class LanguageMetadataActivity : AbstractExampleActivity<LanguageServiceGrpc.LanguageServiceFutureStub>(
     CountingIdlingResource("LanguageMetadata")
 ) {
+    lateinit var job: Job
+    override val coroutineContext: CoroutineContext
+        get() = Dispatchers.Main + job
 
     override val factory = StubFactory(
         LanguageServiceGrpc.LanguageServiceFutureStub::class,
@@ -49,6 +54,8 @@ class LanguageMetadataActivity : AbstractExampleActivity<LanguageServiceGrpc.Lan
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        job = Job()
 
         // call the api
         launch(Dispatchers.Main) {

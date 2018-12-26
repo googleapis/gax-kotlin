@@ -23,7 +23,9 @@ import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.Document
 import com.google.cloud.language.v1.LanguageServiceGrpc
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Kotlin example using KGax with gRPC and the Google Natural Language API.
@@ -31,6 +33,10 @@ import kotlinx.coroutines.launch
 class LanguageActivity : AbstractExampleActivity<LanguageServiceGrpc.LanguageServiceFutureStub>(
     CountingIdlingResource("Language")
 ) {
+    lateinit var job: Job
+    override val coroutineContext: CoroutineContext
+        get() = Dispatchers.Main + job
+
     override val factory = StubFactory(
         LanguageServiceGrpc.LanguageServiceFutureStub::class,
         "language.googleapis.com"
@@ -47,6 +53,8 @@ class LanguageActivity : AbstractExampleActivity<LanguageServiceGrpc.LanguageSer
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        job = Job()
 
         // call the api
         launch(Dispatchers.Main) {
