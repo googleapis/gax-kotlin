@@ -297,8 +297,8 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                     }
 
                     completed = true
-                    cancelled = when {
-                        t is StatusRuntimeException -> t.status.code == Status.Code.CANCELLED
+                    cancelled = when (t) {
+                        is StatusRuntimeException -> t.status.code == Status.Code.CANCELLED
                         else -> false
                     }
 
@@ -408,7 +408,13 @@ fun <T : AbstractStub<T>> T.prepare(options: ClientCallOptions) =
     GrpcClientStub(this, options)
 
 /**
- * Decorated call options. The settings apply on a per-call level.
+ * Decorated call options. The settings apply on a per-call level and can be created
+ * using the clientCallOptions builder method:
+ *
+ * val opts = clientCallOptions {
+ *     withAccessToken(...)
+ *     withMetadata(...)
+ * }
  */
 class ClientCallOptions constructor(
     val credentials: CallCredentials? = null,
@@ -495,7 +501,7 @@ class ClientCallOptions constructor(
     }
 }
 
-internal fun clientCallOptions(init: ClientCallOptions.Builder.() -> Unit = {}): ClientCallOptions {
+fun clientCallOptions(init: ClientCallOptions.Builder.() -> Unit = {}): ClientCallOptions {
     val builder = ClientCallOptions.Builder()
     builder.apply(init)
     return builder.build()

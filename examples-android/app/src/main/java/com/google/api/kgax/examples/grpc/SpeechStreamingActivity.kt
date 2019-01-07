@@ -34,7 +34,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlin.coroutines.CoroutineContext
 
 private const val TAG = "APITest"
@@ -91,12 +90,11 @@ class SpeechStreamingActivity : AbstractExampleActivity<SpeechGrpc.SpeechStub>(
         super.onPause()
 
         // ensure mic data stops
-        runBlocking {
+        launch {
             audioEmitter.stop()
             streams?.responses?.cancel()
+            job.cancel()
         }
-
-        job.cancel()
     }
 
     override fun onRequestPermissionsResult(
