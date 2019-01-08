@@ -25,8 +25,8 @@ plugins {
     jacoco
 }
 
-jacoco {
-    toolVersion = "0.8.2"
+base {
+    archivesBaseName = "kgax-grpc-base"
 }
 
 dependencies {
@@ -50,21 +50,15 @@ dependencies {
     testImplementation("io.grpc:grpc-netty-shaded:${ext["grpc_version"]}")
 }
 
-base {
-    archivesBaseName = "kgax-grpc-base"
-}
-
-
 java {
     sourceSets {
-        getByName("test") {
-            withGroovyBuilder {
-                "proto" {
-                    "srcDir"("$projectDir/../kgax-common-protos")
-                }
-            }
-        }
+        getByName("test").proto.srcDir("$projectDir/../api-common-protos")
+        getByName("test").proto.srcDir("$projectDir/../api-common-protos-android-extras")
     }
+}
+
+jacoco {
+    toolVersion = "0.8.2"
 }
 
 protobuf {

@@ -25,8 +25,8 @@ plugins {
     jacoco
 }
 
-jacoco {
-    toolVersion = "0.8.2"
+base {
+    archivesBaseName = "kgax-grpc-android"
 }
 
 dependencies {
@@ -47,15 +47,15 @@ dependencies {
     testImplementation("com.google.truth:truth:${ext["truth_version"]}")
 }
 
-base {
-    archivesBaseName = "kgax-grpc-android"
-}
-
 java {
     sourceSets {
         getByName("main").proto.srcDir("$projectDir/../api-common-protos")
         getByName("main").proto.srcDir("$projectDir/../api-common-protos-android-extras")
     }
+}
+
+jacoco {
+    toolVersion = "0.8.2"
 }
 
 protobuf {

@@ -25,8 +25,8 @@ plugins {
     jacoco
 }
 
-jacoco {
-    toolVersion = "0.8.2"
+base {
+    archivesBaseName = "kgax-grpc"
 }
 
 dependencies {
@@ -48,20 +48,14 @@ dependencies {
     testImplementation("com.google.truth:truth:${ext["truth_version"]}")
 }
 
-base {
-    archivesBaseName = "kgax-grpc"
-}
-
 java {
     sourceSets {
-        getByName("main") {
-            withGroovyBuilder {
-                "proto" {
-                    "srcDir"("$projectDir/../api-common-protos")
-                }
-            }
-        }
+        getByName("main").proto.srcDir("$projectDir/../api-common-protos")
     }
+}
+
+jacoco {
+    toolVersion = "0.8.2"
 }
 
 protobuf {
