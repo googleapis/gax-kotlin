@@ -13,7 +13,7 @@ jobs:
             git submodule init
             git submodule update
       - restore_cache: &kgax-key
-          key: kgax-{{ checksum "build.gradle" }}-{{ checksum "kgax-core/build.gradle" }}-{{ checksum "kgax-grpc-base/build.gradle" }}-{{ checksum "kgax-grpc/build.gradle" }}-{{ checksum "kgax-grpc-android/build.gradle" }}
+          key: kgax-{{ checksum "build.gradle.kts" }}-{{ checksum "kgax-core/build.gradle.kts" }}-{{ checksum "kgax-grpc-base/build.gradle.kts" }}-{{ checksum "kgax-grpc/build.gradle.kts" }}-{{ checksum "kgax-grpc-android/build.gradle.kts" }}
       - run: 
           name: Download Dependencies
           command: ./gradlew dependencies
