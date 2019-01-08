@@ -57,7 +57,7 @@ java {
         getByName("main") {
             withGroovyBuilder {
                 "proto" {
-                    "srcDir"("$projectDir/../kgax-common-protos")
+                    "srcDir"("$projectDir/../api-common-protos")
                 }
             }
         }

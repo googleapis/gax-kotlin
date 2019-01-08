@@ -53,13 +53,8 @@ base {
 
 java {
     sourceSets {
-        getByName("main") {
-            withGroovyBuilder {
-                "proto" {
-                    "srcDir"("$projectDir/../kgax-common-protos")
-                }
-            }
-        }
+        getByName("main").proto.srcDir("$projectDir/../api-common-protos")
+        getByName("main").proto.srcDir("$projectDir/../api-common-protos-android-extras")
     }
 }
 
