@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
-import com.google.protobuf.gradle.*
+import com.google.protobuf.gradle.protobuf
+import com.google.protobuf.gradle.protoc
+import com.google.protobuf.gradle.plugins
+import com.google.protobuf.gradle.id
+import com.google.protobuf.gradle.generateProtoTasks
+import com.google.protobuf.gradle.ofSourceSet
 
 plugins {
     idea
@@ -22,6 +27,10 @@ plugins {
     kotlin("jvm")
     application
     id("com.google.protobuf") version "0.8.7"
+}
+
+base {
+    archivesBaseName = "kgax-examples"
 }
 
 application {
@@ -40,10 +49,6 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation(kotlin("test-junit"))
     testImplementation("junit:junit:${ext["junit_version"]}")
-}
-
-base {
-    archivesBaseName = "kgax-examples"
 }
 
 protobuf {

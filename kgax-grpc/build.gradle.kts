@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import com.google.protobuf.gradle.*
+import com.google.protobuf.gradle.protobuf
+import com.google.protobuf.gradle.protoc
 
 plugins {
     idea
