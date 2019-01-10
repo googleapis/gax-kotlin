@@ -1,0 +1,4 @@
+[submodule "api-common-protos"]
+	path = api-common-protos
+	url = git@github.com:googleapis/api-common-protos.git
+	branch = input-contract

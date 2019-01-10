@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-import com.google.protobuf.gradle.*
+import com.google.protobuf.gradle.protobuf
+import com.google.protobuf.gradle.protoc
+import com.google.protobuf.gradle.plugins
+import com.google.protobuf.gradle.id
+import com.google.protobuf.gradle.remove
+import com.google.protobuf.gradle.generateProtoTasks
+import com.google.protobuf.gradle.ofSourceSet
 
 plugins {
     idea
@@ -25,8 +31,8 @@ plugins {
     jacoco
 }
 
-jacoco {
-    toolVersion = "0.8.2"
+base {
+    archivesBaseName = "kgax-grpc-android"
 }
 
 dependencies {
@@ -47,20 +53,15 @@ dependencies {
     testImplementation("com.google.truth:truth:${ext["truth_version"]}")
 }
 
-base {
-    archivesBaseName = "kgax-grpc-android"
-}
-
 java {
     sourceSets {
-        getByName("main") {
-            withGroovyBuilder {
-                "proto" {
-                    "srcDir"("$projectDir/../kgax-common-protos")
-                }
-            }
-        }
+        getByName("main").proto.srcDir("$projectDir/../api-common-protos")
+        getByName("main").proto.srcDir("$projectDir/../api-android-protos")
     }
+}
+
+jacoco {
+    toolVersion = "0.8.2"
 }
 
 protobuf {

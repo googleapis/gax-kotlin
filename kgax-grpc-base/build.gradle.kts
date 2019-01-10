@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-import com.google.protobuf.gradle.*
+import com.google.protobuf.gradle.protobuf
+import com.google.protobuf.gradle.protoc
+import com.google.protobuf.gradle.plugins
+import com.google.protobuf.gradle.id
+import com.google.protobuf.gradle.remove
+import com.google.protobuf.gradle.generateProtoTasks
+import com.google.protobuf.gradle.ofSourceSet
 
 plugins {
     idea
@@ -25,8 +31,8 @@ plugins {
     jacoco
 }
 
-jacoco {
-    toolVersion = "0.8.2"
+base {
+    archivesBaseName = "kgax-grpc-base"
 }
 
 dependencies {
@@ -36,9 +42,9 @@ dependencies {
 
     implementation("javax.annotation:javax.annotation-api:${ext["javax_annotation_version"]}")
 
+    implementation("io.grpc:grpc-protobuf-lite:${ext["grpc_version"]}")
     api("io.grpc:grpc-stub:${ext["grpc_version"]}")
     api("io.grpc:grpc-auth:${ext["grpc_version"]}")
-    implementation("io.grpc:grpc-protobuf-lite:${ext["grpc_version"]}")
     api("com.google.auth:google-auth-library-oauth2-http:0.9.1")
     api("com.google.auth:google-auth-library-credentials:0.9.1")
 
@@ -50,21 +56,15 @@ dependencies {
     testImplementation("io.grpc:grpc-netty-shaded:${ext["grpc_version"]}")
 }
 
-base {
-    archivesBaseName = "kgax-grpc-base"
-}
-
-
 java {
     sourceSets {
-        getByName("test") {
-            withGroovyBuilder {
-                "proto" {
-                    "srcDir"("$projectDir/../kgax-common-protos")
-                }
-            }
-        }
+        getByName("test").proto.srcDir("$projectDir/../api-common-protos")
+        getByName("test").proto.srcDir("$projectDir/../api-android-protos")
     }
+}
+
+jacoco {
+    toolVersion = "0.8.2"
 }
 
 protobuf {
