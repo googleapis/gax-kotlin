@@ -42,9 +42,9 @@ dependencies {
 
     implementation("javax.annotation:javax.annotation-api:${ext["javax_annotation_version"]}")
 
+    implementation("io.grpc:grpc-protobuf-lite:${ext["grpc_version"]}")
     api("io.grpc:grpc-stub:${ext["grpc_version"]}")
     api("io.grpc:grpc-auth:${ext["grpc_version"]}")
-    implementation("io.grpc:grpc-protobuf-lite:${ext["grpc_version"]}")
     api("com.google.auth:google-auth-library-oauth2-http:0.9.1")
     api("com.google.auth:google-auth-library-credentials:0.9.1")
 
@@ -59,7 +59,7 @@ dependencies {
 java {
     sourceSets {
         getByName("test").proto.srcDir("$projectDir/../api-common-protos")
-        getByName("test").proto.srcDir("$projectDir/../api-common-protos-android-extras")
+        getByName("test").proto.srcDir("$projectDir/../api-android-protos")
     }
 }
 

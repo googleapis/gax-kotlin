@@ -56,7 +56,7 @@ dependencies {
 java {
     sourceSets {
         getByName("main").proto.srcDir("$projectDir/../api-common-protos")
-        getByName("main").proto.srcDir("$projectDir/../api-common-protos-android-extras")
+        getByName("main").proto.srcDir("$projectDir/../api-android-protos")
     }
 }
 
