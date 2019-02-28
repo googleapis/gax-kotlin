@@ -26,7 +26,7 @@ plugins {
     maven
     kotlin("jvm")
     application
-    id("com.google.protobuf") version "0.8.7"
+    id("com.google.protobuf") version "0.8.8"
 }
 
 base {
