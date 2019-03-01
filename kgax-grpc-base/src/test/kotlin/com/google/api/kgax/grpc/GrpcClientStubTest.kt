@@ -20,6 +20,7 @@ import com.google.api.kgax.Retry
 import com.google.api.kgax.RetryContext
 import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.SettableFuture
+import com.google.protobuf.Empty
 import com.google.protobuf.Int32Value
 import com.google.protobuf.StringValue
 import com.nhaarman.mockito_kotlin.any
@@ -890,6 +891,14 @@ class GrpcClientStubTest {
         assertThat(call).isNotEqualTo(otherCall)
         assertThat(otherCall.options.initialRequests)
             .containsExactly(string("init!"))
+    }
+
+    @Test
+    fun `can map a call result`() {
+        val metadata = ResponseMetadata()
+        val result = CallResult(Empty.getDefaultInstance(), metadata)
+        assertThat(result.map { Unit }).isEqualTo(CallResult(Unit, metadata))
+        assertThat(result.map { "body" }).isEqualTo(CallResult("body", metadata))
     }
 
     private fun createTestStubMock(): TestStub {

@@ -508,7 +508,11 @@ fun clientCallOptions(init: ClientCallOptions.Builder.() -> Unit = {}): ClientCa
 }
 
 /** Result of the call with the response [body] associated [metadata]. */
-data class CallResult<RespT>(val body: RespT, val metadata: ResponseMetadata)
+data class CallResult<RespT>(val body: RespT, val metadata: ResponseMetadata) {
+
+    /** Map the body of this result to another type using the [transform]. */
+    fun <R> map(transform: (RespT) -> R) = CallResult(transform(this.body), this.metadata)
+}
 
 /**
  * Result of a bi-directional streaming call including [requests] and [responses] streams.
