@@ -21,7 +21,7 @@ import org.jetbrains.dokka.gradle.PackageOptions
 plugins {
     idea
     maven
-    kotlin("jvm") version "1.3.20"
+    kotlin("jvm") version "1.3.0"
     id("org.jetbrains.dokka") version "0.9.17"
     id("jacoco")
 }
