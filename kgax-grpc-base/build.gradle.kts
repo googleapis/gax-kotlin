@@ -27,7 +27,7 @@ plugins {
     maven
     kotlin("jvm")
     `java-library`
-    id("com.google.protobuf") version "0.8.7"
+    id("com.google.protobuf") version "0.8.8"
     jacoco
 }
 
@@ -38,7 +38,7 @@ base {
 dependencies {
     implementation(kotlin("stdlib"))
 
-    implementation(project(":kgax-core"))
+    api(project(":kgax-core"))
 
     implementation("javax.annotation:javax.annotation-api:${ext["javax_annotation_version"]}")
 
