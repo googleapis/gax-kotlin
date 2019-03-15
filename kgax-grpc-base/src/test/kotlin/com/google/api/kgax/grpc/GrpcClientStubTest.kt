@@ -42,8 +42,10 @@ import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.map
 import kotlinx.coroutines.channels.toList
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -379,10 +381,10 @@ class GrpcClientStubTest {
         }
 
         // fake output from server
-        outStream?.onError(exception)
-        delay(200)
-        outStream?.onError(exception)
-        delay(200)
+        repeat(2) {
+            outStream?.onError(exception)
+            delay(100)
+        }
 
         outStream?.onNext(string("one"))
         outStream?.onNext(string("two"))
@@ -394,6 +396,126 @@ class GrpcClientStubTest {
         assertThat(result.requests.isClosedForSend).isTrue()
 
         assertThat(timesExecuted).isEqualTo(3)
+        assertThat(retry.executed).isTrue()
+    }
+
+    @Test
+    fun `Can retry a streaming call with scope`() = runBlocking<Unit> {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+        val exception: RuntimeException = mock()
+        var timesExecuted = 0
+
+        val retry = object : Retry {
+            var executed = false
+
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                assertThat(error).isEqualTo(exception)
+                assertThat(context.numberOfAttempts).isEqualTo(timesExecuted - 1)
+                executed = true
+                return 50
+            }
+        }
+
+        // capture output stream
+        val call =
+            GrpcClientStub(stub, ClientCallOptions(retry = retry))
+
+        var outStream: StreamObserver<StringValue>? = null
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            outStream = outs
+            timesExecuted++
+            return inStream
+        }
+
+        val result = coroutineScope {
+            val result = call.executeStreaming(scope = this) { arg ->
+                assertThat(arg).isEqualTo(stub)
+                ::method
+            }
+
+            // fake output from server
+            outStream?.onError(exception)
+            delay(100)
+
+            outStream?.onNext(string("foo"))
+            outStream?.onNext(string("bar"))
+
+            result
+        }
+
+        outStream?.onNext(string("one"))
+        outStream?.onNext(string("two"))
+        outStream?.onCompleted()
+
+        verify(inStream).onCompleted()
+        assertThat(result.responses.map { it.value }.toList()).containsExactly("foo", "bar").inOrder()
+        assertThat(result.responses.isClosedForReceive).isTrue()
+        assertThat(result.requests.isClosedForSend).isTrue()
+
+        assertThat(timesExecuted).isEqualTo(2)
+        assertThat(retry.executed).isTrue()
+    }
+
+    @Test
+    fun `Can retry a streaming call with scope and retry`() = runBlocking<Unit> {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+        val exception: RuntimeException = mock()
+        var timesExecuted = 0
+
+        val retry = object : Retry {
+            var executed = false
+
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                assertThat(error).isEqualTo(exception)
+                assertThat(context.numberOfAttempts).isEqualTo(timesExecuted - 1)
+                executed = true
+                return 50
+            }
+        }
+
+        // capture output stream
+        val call =
+            GrpcClientStub(stub, ClientCallOptions(retry = retry))
+
+        var outStream: StreamObserver<StringValue>? = null
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            outStream = outs
+            timesExecuted++
+            return inStream
+        }
+
+        val result = coroutineScope {
+            val result = call.executeStreaming(scope = this) { arg ->
+                assertThat(arg).isEqualTo(stub)
+                ::method
+            }
+
+            // fake output from server
+            repeat(4) {
+                outStream?.onError(exception)
+                delay(100)
+            }
+
+            result
+        }
+
+        repeat(3) {
+            outStream?.onError(exception)
+            delay(100)
+        }
+
+        verify(inStream, never()).onCompleted()
+
+        outStream?.onCompleted()
+
+        verify(inStream).onCompleted()
+        assertThat(result.responses.map { it.value }.toList()).isEmpty()
+        assertThat(result.responses.isClosedForReceive).isTrue()
+        assertThat(result.requests.isClosedForSend).isTrue()
+
+        assertThat(timesExecuted).isEqualTo(5)
         assertThat(retry.executed).isTrue()
     }
 
@@ -854,6 +976,26 @@ class GrpcClientStubTest {
             withMetadata("a", listOf("one", "two"))
             withMetadata("other", listOf())
         }
+
+        assertThat(stub).isNotEqualTo(otherStub)
+        assertThat(otherStub.options.requestMetadata)
+            .containsExactlyEntriesIn(
+                mapOf(
+                    "a" to listOf("one", "two"),
+                    "other" to listOf()
+                )
+            )
+    }
+
+    @Test
+    fun `can be prepared directly`() {
+        val stub = createTestStubMock()
+        val otherStub = stub.prepare(
+            ClientCallOptions(requestMetadata = mapOf(
+                "a" to listOf("one", "two"),
+                "other" to listOf()
+            ))
+        )
 
         assertThat(stub).isNotEqualTo(otherStub)
         assertThat(otherStub.options.requestMetadata)

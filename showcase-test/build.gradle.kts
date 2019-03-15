@@ -4,7 +4,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *  
+ *
  *     https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -23,32 +23,25 @@ import com.google.protobuf.gradle.ofSourceSet
 
 plugins {
     idea
-    maven
+    java
     kotlin("jvm")
-    application
     id("com.google.protobuf") version "0.8.8"
 }
 
 base {
-    archivesBaseName = "kgax-examples"
+    archivesBaseName = "showcase-test"
 }
-
-application {
-    mainClassName = "example.Main"
-}
-
-defaultTasks = listOf("run")
 
 dependencies {
     implementation(kotlin("stdlib"))
+    //implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.0.1")
 
-    implementation("javax.annotation:javax.annotation-api:${ext["javax_annotation_version"]}")
-
-    compile(project(":kgax-grpc"))
+    implementation(project(":kgax-grpc"))
 
     testImplementation(kotlin("test"))
     testImplementation(kotlin("test-junit"))
     testImplementation("junit:junit:${ext["junit_version"]}")
+    testImplementation("com.google.truth:truth:${ext["truth_version"]}")
 }
 
 protobuf {
@@ -61,7 +54,7 @@ protobuf {
         }
     }
     generateProtoTasks {
-        ofSourceSet("main").forEach {
+        ofSourceSet("test").forEach {
             it.plugins {
                 id("grpc")
             }

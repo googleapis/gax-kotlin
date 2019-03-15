@@ -35,15 +35,16 @@ import io.grpc.stub.MetadataUtils
 import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.guava.await
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.InputStream
@@ -62,9 +63,8 @@ annotation class DecoratorMarker
  * For example:
  *
  * ```
- * val stub = StubFactory(MyBlockingStub::class, "host.example.com")
- *                .fromServiceAccount(keyFile, listOf("https://host.example.com/auth/my-scope"))
- * val response = stub.execute { it -> it.someApiMethod(...) }
+ * val stub = StubFactory(MyBlockingStub::class, "host.example.com", "80").newStub()
+ * val response = stub.execute { it -> it.someStubMethod(...) }
  * ```
  */
 class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: ClientCallOptions) {
@@ -76,8 +76,8 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * val response = stub.prepare {
      *     withMetadata("foo", listOf("bar"))
      *     withMetadata("1", listOf("a", "b"))
-     * }.executeBlocking {
-     *     it.myBlockingMethod(...)
+     * }.execute {
+     *     it.myStubMethod(...)
      * }
      * print("${response.body}")
      * ```
@@ -160,19 +160,23 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * will provide a pair of inbound and outbound streams.
      *
      * An optional [context] can be supplied to enable arbitrary retry strategies.
+     *
+     * An optional coroutine [scope] can be provided. The GlobalScope is used by default since
+     * streaming methods can remain open for arbitrarily long periods of time.
      */
     @ExperimentalCoroutinesApi
-    suspend fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
+    fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
         context: String = "",
+        scope: CoroutineScope = GlobalScope,
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
-    ): StreamingCall<ReqT, RespT> = coroutineScope {
+    ): StreamingCall<ReqT, RespT> {
         val requestChannel = Channel<ReqT>(Channel.UNLIMITED)
         val responseChannel = Channel<RespT>(Channel.UNLIMITED)
 
         val invoke = { stub: T, responseStream: StreamObserver<RespT> -> method(stub)(responseStream) }
-        executeStreaming(context, invoke, requestChannel = requestChannel, responseChannel = responseChannel)
+        executeStreaming(context, scope, invoke, requestChannel = requestChannel, responseChannel = responseChannel)
 
-        StreamingCall(requestChannel, responseChannel)
+        return StreamingCall(requestChannel, responseChannel)
     }
 
     /**
@@ -196,19 +200,23 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * the server's response.
      *
      * An optional [context] can be supplied to enable arbitrary retry strategies.
+     *
+     * An optional coroutine [scope] can be provided. The GlobalScope is used by default since
+     * streaming methods can remain open for arbitrarily long periods of time.
      */
     @ExperimentalCoroutinesApi
-    suspend fun <ReqT : MessageLite, RespT : MessageLite> executeClientStreaming(
+    fun <ReqT : MessageLite, RespT : MessageLite> executeClientStreaming(
         context: String = "",
+        scope: CoroutineScope = GlobalScope,
         method: (T) -> (StreamObserver<RespT>) -> StreamObserver<ReqT>
-    ): ClientStreamingCall<ReqT, RespT> = coroutineScope {
+    ): ClientStreamingCall<ReqT, RespT> {
         val requestChannel = Channel<ReqT>(Channel.UNLIMITED)
         val response = CompletableDeferred<RespT>()
 
         val invoke = { stub: T, responseStream: StreamObserver<RespT> -> method(stub)(responseStream) }
-        executeStreaming(context, invoke, requestChannel = requestChannel, response = response)
+        executeStreaming(context, scope, invoke, requestChannel = requestChannel, response = response)
 
-        ClientStreamingCall(requestChannel, response)
+        return ClientStreamingCall(requestChannel, response)
     }
 
     /**
@@ -231,31 +239,36 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      * The result of this method will provide the inbound stream of responses from the server.
      *
      * An optional [context] can be supplied to enable arbitrary retry strategies.
+     *
+     * An optional coroutine [scope] can be provided. The GlobalScope is used by default since
+     * streaming methods can remain open for arbitrarily long periods of time.
      */
     @ExperimentalCoroutinesApi
-    suspend fun <RespT : MessageLite> executeServerStreaming(
+    fun <RespT : MessageLite> executeServerStreaming(
         context: String = "",
+        scope: CoroutineScope = GlobalScope,
         method: (T, StreamObserver<RespT>) -> Unit
-    ): ServerStreamingCall<RespT> = coroutineScope {
+    ): ServerStreamingCall<RespT> {
         val responseChannel = Channel<RespT>(Channel.UNLIMITED)
 
         val invoke: (T, StreamObserver<RespT>) -> StreamObserver<RespT>? = { stub, responseStream ->
             method(stub, responseStream)
             null
         }
-        executeStreaming(context, invoke, responseChannel = responseChannel)
+        executeStreaming(context, scope, invoke, responseChannel = responseChannel)
 
-        ServerStreamingCall(responseChannel)
+        return ServerStreamingCall(responseChannel)
     }
 
     @ExperimentalCoroutinesApi
-    private suspend fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
+    private fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
         context: String,
+        scope: CoroutineScope,
         method: (T, StreamObserver<RespT>) -> StreamObserver<ReqT>?,
         requestChannel: Channel<ReqT>? = null,
         responseChannel: Channel<RespT>? = null,
         response: CompletableDeferred<RespT>? = null
-    ) = coroutineScope {
+    ) {
         var canRetry = true
         var completed = false
         var cancelled = false
@@ -266,7 +279,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
 
         // pipe all requests to the observer
         val requestWriter = requestChannel?.let { channel ->
-            GlobalScope.launch {
+            scope.launch {
                 for (next in channel) {
                     requestObserver?.onNext(next)
                 }
@@ -282,34 +295,35 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                 override fun onNext(value: RespT) {
                     canRetry = false
 
-                    responseChannel?.let { runBlocking { it.send(value) } }
-                    response?.complete(value)
+                    if (scope.isActive && !completed) {
+                        responseChannel?.offer(value)
+                        response?.complete(value)
+                    }
                 }
 
                 override fun onError(t: Throwable) {
                     val retryAfter = if (canRetry) options.retry.retryAfter(t, retryContext) else null
                     if (retryAfter != null) {
-                        runBlocking {
+                        requestWriter?.cancel()
+                        scope.launch {
                             delay(retryAfter)
                             start(retryContext.next())
                         }
-                        return
-                    }
-
-                    completed = true
-                    cancelled = when (t) {
-                        is StatusRuntimeException -> t.status.code == Status.Code.CANCELLED
-                        else -> false
-                    }
-
-                    if (cancelled) {
-                        responseChannel?.close()
                     } else {
-                        responseChannel?.close(t)
+                        completed = true
+                        cancelled = when (t) {
+                            is StatusRuntimeException -> t.status.code == Status.Code.CANCELLED
+                            else -> false
+                        }
+
+                        if (cancelled) {
+                            responseChannel?.close()
+                        } else {
+                            responseChannel?.close(t)
+                        }
+                        response?.completeExceptionally(t)
+                        requestChannel?.close()
                     }
-                    response?.completeExceptionally(t)
-                    requestChannel?.close()
-                    runBlocking { requestWriter?.join() }
                 }
 
                 override fun onCompleted() {
@@ -318,17 +332,14 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
 
                     responseChannel?.close()
                     requestChannel?.close()
-                    runBlocking { requestWriter?.join() }
                 }
             })
 
             // add and initial requests
             if (requestChannel != null) {
                 for (request in options.initialRequests) {
-                    runBlocking {
-                        @Suppress("UNCHECKED_CAST")
-                        requestChannel.send(request as ReqT)
-                    }
+                    @Suppress("UNCHECKED_CAST")
+                    requestChannel.offer(request as ReqT)
                 }
             }
         }
@@ -391,10 +402,6 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         return stub
     }
 }
-
-/** Get the call context associated with a one time use stub */
-private val <T : AbstractStub<T>> T.context: ClientCallContext
-    get() = this.callOptions.getOption(ClientCallContext.KEY)
 
 /** see [GrpcClientStub.prepare] */
 fun <T : AbstractStub<T>> T.prepare(init: ClientCallOptions.Builder.() -> Unit = {}): GrpcClientStub<T> {
@@ -586,3 +593,7 @@ suspend fun <ReqT, RespT, ElementT> pager(
     nextPage = nextPage,
     hasNextPage = { p -> p.elements.any() && p.token.isNotEmpty() }
 )
+
+/** Get the call context associated with a one time use stub */
+private val <T : AbstractStub<T>> T.context: ClientCallContext
+    get() = this.callOptions.getOption(ClientCallContext.KEY)
