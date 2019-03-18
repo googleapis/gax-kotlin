@@ -48,6 +48,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.InputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 @DslMarker
 annotation class DecoratorMarker
@@ -269,7 +270,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         responseChannel: Channel<RespT>? = null,
         response: CompletableDeferred<RespT>? = null
     ) {
-        var canRetry = true
+        val canRetry = AtomicBoolean(true)
         var completed = false
         var cancelled = false
 
@@ -281,6 +282,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         val requestWriter = requestChannel?.let { channel ->
             scope.launch {
                 for (next in channel) {
+                    canRetry.compareAndSet(true, false)
                     requestObserver?.onNext(next)
                 }
             }
@@ -293,7 +295,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             // invoke method
             requestObserver = method(stub, object : StreamObserver<RespT> {
                 override fun onNext(value: RespT) {
-                    canRetry = false
+                    canRetry.compareAndSet(true, false)
 
                     if (scope.isActive && !completed) {
                         responseChannel?.offer(value)
@@ -302,7 +304,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                 }
 
                 override fun onError(t: Throwable) {
-                    val retryAfter = if (canRetry) options.retry.retryAfter(t, retryContext) else null
+                    val retryAfter = if (canRetry.get()) options.retry.retryAfter(t, retryContext) else null
                     if (retryAfter != null) {
                         requestWriter?.cancel()
                         scope.launch {
@@ -310,6 +312,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                             start(retryContext.next())
                         }
                     } else {
+                        canRetry.compareAndSet(true, false)
                         completed = true
                         cancelled = when (t) {
                             is StatusRuntimeException -> t.status.code == Status.Code.CANCELLED
@@ -327,7 +330,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                 }
 
                 override fun onCompleted() {
-                    canRetry = false
+                    canRetry.compareAndSet(true, false)
                     completed = true
 
                     responseChannel?.close()
@@ -373,7 +376,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     fun stubWithContext(): T {
         // add gax interceptor
         var stub = originalStub
-            .withInterceptors(GAXInterceptor())
+            .withInterceptors(GAXInterceptor)
             .withOption(
                 ClientCallContext.KEY,
                 ClientCallContext()
