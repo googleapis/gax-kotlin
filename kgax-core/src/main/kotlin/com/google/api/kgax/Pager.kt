@@ -19,6 +19,7 @@ package com.google.api.kgax
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.produce
 
@@ -46,7 +47,7 @@ suspend fun <ReqT, RespT, ElementT, TokenT, PageT : Page<ElementT, TokenT>> crea
     nextPage: (RespT) -> PageT,
     hasNextPage: (PageT) -> Boolean = { p -> p.elements.any() && p.token != null },
     scope: CoroutineScope = GlobalScope
-): ReceiveChannel<PageT> = scope.produce {
+): ReceiveChannel<PageT> = scope.produce(capacity = Channel.RENDEZVOUS) {
     val original = initialRequest()
 
     // iterate through all requests
