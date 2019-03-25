@@ -462,7 +462,9 @@ class GrpcClientStubTest {
         val call = GrpcClientStub(stub, ClientCallOptions())
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
             // fake output from server
-            outs.onCompleted()
+            afterDelay {
+                outs.onCompleted()
+            }
 
             return inStream
         }

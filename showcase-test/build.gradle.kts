@@ -34,7 +34,6 @@ base {
 
 dependencies {
     implementation(kotlin("stdlib"))
-    //implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.0.1")
 
     implementation(project(":kgax-grpc"))
 

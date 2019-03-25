@@ -41,6 +41,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ObsoleteCoroutinesApi
+import kotlinx.coroutines.channels.ActorScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
@@ -50,6 +51,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.InputStream
 
 @DslMarker
@@ -264,6 +266,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         return ServerStreamer(job, responseChannel)
     }
 
+    @ObsoleteCoroutinesApi
     @ExperimentalCoroutinesApi
     private fun <ReqT : MessageLite, RespT : MessageLite> executeStreaming(
         scope: CoroutineScope = GlobalScope,
@@ -273,147 +276,14 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         responseChannel: Channel<RespT>? = null,
         response: CompletableDeferred<RespT>? = null
     ): Job = scope.launch {
-        val (processor, done) = getStreamProcessor(scope, method, requestChannel, responseChannel, response)
-
-        // start now
-        processor.send(StreamEvent.Restart(RetryContext(context)))
-
-        // add shutdown handlers
-        responseChannel?.invokeOnClose { error ->
-            processor.sendBlocking(StreamEvent.KillRPC(error))
-        }
-        requestChannel?.invokeOnClose {
-            processor.sendBlocking(StreamEvent.KillInput)
-        }
-
-        // wait for all processing to end
-        done.await()
-    }
-
-    @ObsoleteCoroutinesApi
-    private fun <ReqT : MessageLite, RespT : MessageLite> getStreamProcessor(
-        scope: CoroutineScope,
-        method: (T, StreamObserver<RespT>) -> StreamObserver<ReqT>?,
-        requestChannel: Channel<ReqT>? = null,
-        responseChannel: Channel<RespT>? = null,
-        response: CompletableDeferred<RespT>? = null
-    ): Pair<SendChannel<StreamEvent>, Deferred<Unit>> {
         val done = CompletableDeferred<Unit>()
-        val actor = scope.actor<StreamEvent>(capacity = Channel.UNLIMITED) {
-            var canRetry = true
-            var completed = false
-            var cancelled = false
 
-            // these change during a retry
-            lateinit var stub: T
-            lateinit var retryContext: RetryContext
-            var requestObserver: StreamObserver<ReqT>? = null
-
+        // create a processor to handle all events
+        val processor = scope.actor<StreamEvent>(capacity = Channel.UNLIMITED) {
             try {
-                // pipe all requests to the observer (if needed)
-                requestChannel?.let { incoming ->
-                    launch {
-                        for (next in incoming) {
-                            channel.send(StreamEvent.Send(next))
-                        }
-                    }
-                }
-
-                // close down the in/out channels and end processing
-                fun ensureClosed(t: Throwable? = null) {
-                    canRetry = false
-                    completed = true
-
-                    // close in/out channels
-                    if (cancelled) {
-                        responseChannel?.close()
-                    } else {
-                        responseChannel?.close(t)
-                    }
-                    if (t != null) {
-                        response?.completeExceptionally(t)
-                    }
-                    requestChannel?.close()
-
-                    // stop processing
-                    channel.close(t)
-                }
-
-                // event loop
-                for (msg in channel) {
-                    when (msg) {
-                        is StreamEvent.Restart -> {
-                            retryContext = msg.context
-                            stub = stubWithContext()
-
-                            // invoke method and forward events to processor
-                            requestObserver = method(stub, object : StreamObserver<RespT> {
-                                override fun onNext(value: RespT) = channel.sendBlocking(StreamEvent.Receive(value))
-                                override fun onError(t: Throwable) = channel.sendBlocking(StreamEvent.Error(t))
-                                override fun onCompleted() = channel.sendBlocking(StreamEvent.Close)
-                            })
-
-                            // send any initial requests
-                            for (request in options.initialRequests) {
-                                @Suppress("UNCHECKED_CAST")
-                                requestObserver?.onNext(request as ReqT)
-                            }
-                        }
-                        is StreamEvent.Send<*> -> {
-                            canRetry = false
-
-                            val value = msg.data as ReqT
-                            requestObserver?.onNext(value)
-                        }
-                        is StreamEvent.Receive<*> -> {
-                            canRetry = false
-
-                            if (isActive && !completed) {
-                                val value = msg.data as RespT
-                                responseChannel?.send(value)
-                                response?.complete(value)
-                            }
-                        }
-                        is StreamEvent.Close -> {
-                            ensureClosed()
-                        }
-                        is StreamEvent.Error -> {
-                            val retryAfter = if (canRetry) options.retry.retryAfter(msg.error, retryContext) else null
-                            if (retryAfter != null) {
-                                launch {
-                                    delay(retryAfter)
-                                    channel.send(StreamEvent.Restart(retryContext.next()))
-                                }
-                            } else {
-                                cancelled = when (msg.error) {
-                                    is StatusRuntimeException -> msg.error.status.code == Status.Code.CANCELLED
-                                    else -> false
-                                }
-
-                                ensureClosed(msg.error)
-                            }
-                        }
-                        is StreamEvent.KillRPC -> {
-                            val shouldCancel = !completed && msg.error == null
-
-                            // shut everything down before actually cancelling
-                            ensureClosed()
-
-                            // this will throw a CancellationException, so do it last
-                            if (shouldCancel) {
-                                stub.context.call.cancel(
-                                    "explicit close() called by client",
-                                    CancellationException()
-                                )
-                            }
-                        }
-                        is StreamEvent.KillInput -> {
-                            requestChannel?.close()
-
-                            if (!cancelled) {
-                                requestObserver?.onCompleted()
-                            }
-                        }
+                with(StreamProcessor(this, method, requestChannel, responseChannel, response)) {
+                    for (message in channel) {
+                        onMessage(message)
                     }
                 }
             } finally {
@@ -421,7 +291,169 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             }
         }
 
-        return Pair(actor, done)
+        // start now
+        processor.send(StreamEvent.Restart(RetryContext(context)))
+
+        // wait for all processing to end
+        done.await()
+    }
+
+    // handles stream state
+    @ObsoleteCoroutinesApi
+    @ExperimentalCoroutinesApi
+    private inner class StreamProcessor<ReqT : MessageLite, RespT : MessageLite>(
+        val scope: ActorScope<StreamEvent>,
+        private val method: (T, StreamObserver<RespT>) -> StreamObserver<ReqT>?,
+        private val requestChannel: Channel<ReqT>? = null,
+        private val responseChannel: Channel<RespT>? = null,
+        private val response: CompletableDeferred<RespT>? = null
+    ) : ActorScope<StreamEvent> by scope {
+        private var canRetry = true
+        private var completed = false
+        private var cancelled = false
+
+        // these change during a retry
+        private lateinit var stub: T
+        private lateinit var retryContext: RetryContext
+        private var requestObserver: StreamObserver<ReqT>? = null
+
+        // pipe all requests to the observer (if needed)
+        val requestWriter = requestChannel?.let { incoming ->
+            launch {
+                for (next in incoming) {
+                    channel.send(StreamEvent.Send(next))
+                }
+            }
+        }
+
+        init {
+            // add shutdown handlers
+            responseChannel?.invokeOnClose { error ->
+                channel.sendBlocking(StreamEvent.KillRPC(error))
+            }
+            requestChannel?.invokeOnClose {
+                // ensure all send events have been processed before proceeding
+                requestChannel.close()
+                runBlocking {
+                    requestWriter?.join()
+                }
+                channel.sendBlocking(StreamEvent.KillInput)
+            }
+        }
+
+        suspend fun onMessage(message: StreamEvent): Unit =
+            try {
+                @Suppress("UNCHECKED_CAST")
+                when (message) {
+                    is StreamEvent.Restart -> onRestart(message)
+                    is StreamEvent.Send<*> -> onSend(message as StreamEvent.Send<ReqT>)
+                    is StreamEvent.Receive<*> -> onReceive(message as StreamEvent.Receive<RespT>)
+                    is StreamEvent.Close -> ensureClosed()
+                    is StreamEvent.Error -> onError(message)
+                    is StreamEvent.KillRPC -> onKillRPC(message)
+                    is StreamEvent.KillInput -> onKillInput()
+                }
+            } catch (t: Throwable) {
+                // shutdown on unexpected errors
+                ensureClosed(t)
+            }
+
+        // starts (or restarts) the stream
+        private fun onRestart(message: StreamEvent.Restart) {
+            retryContext = message.context
+            stub = stubWithContext()
+
+            // invoke method and forward events to processor
+            requestObserver = method(stub, object : StreamObserver<RespT> {
+                override fun onNext(value: RespT) = channel.sendBlocking(StreamEvent.Receive(value))
+                override fun onError(t: Throwable) = channel.sendBlocking(StreamEvent.Error(t))
+                override fun onCompleted() = channel.sendBlocking(StreamEvent.Close)
+            })
+
+            // send any initial requests
+            for (request in options.initialRequests) {
+                @Suppress("UNCHECKED_CAST")
+                requestObserver?.onNext(request as ReqT)
+            }
+        }
+
+        // handles an outgoing message
+        private fun onSend(message: StreamEvent.Send<ReqT>) {
+            canRetry = false
+
+            requestObserver?.onNext(message.data)
+        }
+
+        // handles an incoming message
+        private suspend fun onReceive(message: StreamEvent.Receive<RespT>) {
+            canRetry = false
+
+            if (isActive && !completed) {
+                responseChannel?.send(message.data)
+                response?.complete(message.data)
+            }
+        }
+
+        // handles an error
+        private fun onError(message: StreamEvent.Error) {
+            val retryAfter = if (canRetry) options.retry.retryAfter(message.error, retryContext) else null
+            if (retryAfter != null) {
+                launch {
+                    delay(retryAfter)
+                    channel.send(StreamEvent.Restart(retryContext.next()))
+                }
+            } else {
+                cancelled = when (message.error) {
+                    is StatusRuntimeException -> message.error.status.code == Status.Code.CANCELLED
+                    else -> false
+                }
+
+                ensureClosed(message.error)
+            }
+        }
+
+        // shuts down the underlying RPC
+        private fun onKillRPC(message: StreamEvent.KillRPC) {
+            val shouldCancel = !completed && message.error == null
+
+            // shut everything down before actually cancelling
+            ensureClosed()
+
+            // this will throw a CancellationException, so do it last
+            if (shouldCancel) {
+                stub.context.call.cancel(
+                    "explicit close() called by client",
+                    CancellationException()
+                )
+            }
+        }
+
+        // shuts down the outgoing stream
+        private fun onKillInput() {
+            if (!cancelled) {
+                requestObserver?.onCompleted()
+            }
+        }
+
+        // close down the in/out channels and end all processing
+        private fun ensureClosed(t: Throwable? = null) {
+            canRetry = false
+            completed = true
+
+            // close in/out channels
+            if (cancelled) {
+                responseChannel?.close()
+            } else {
+                responseChannel?.close(t)
+            }
+            if (t != null) {
+                response?.completeExceptionally(t)
+            }
+            requestChannel?.close()
+
+            // stop processing
+            channel.close(t)
+        }
     }
 
     private sealed class StreamEvent {
