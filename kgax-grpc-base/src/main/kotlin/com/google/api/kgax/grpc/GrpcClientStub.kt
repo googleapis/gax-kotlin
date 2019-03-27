@@ -446,13 +446,14 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             } else {
                 responseChannel?.close(t)
             }
-            if (t != null) {
-                response?.completeExceptionally(t)
+            if (t != null && response?.isCompleted == false) {
+                response.completeExceptionally(t)
             }
             requestChannel?.close()
 
             // stop processing
-            channel.close(t)
+            // (do not propagate errors to the processor)
+            channel.close()
         }
     }
 

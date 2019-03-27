@@ -496,6 +496,7 @@ class GrpcClientStubTest {
                 initialRequests = listOf(int32(9), int32(99))
             )
         )
+
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
             // fake output from server
             afterDelay {
@@ -690,8 +691,7 @@ class GrpcClientStubTest {
         }
 
         // capture output stream
-        val call =
-            GrpcClientStub(stub, ClientCallOptions(retry = retry))
+        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
 
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
             // fake output from server
@@ -761,6 +761,7 @@ class GrpcClientStubTest {
                 initialRequests = listOf(int32(1), int32(2))
             )
         )
+
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
             // fake output from the server
             outs.onNext(string("hi!"))
@@ -1071,7 +1072,9 @@ class GrpcClientStubTest {
 
 // helpers for waiting during tests
 private fun waiter() = CompletableDeferred<Unit>()
+
 private fun CompletableDeferred<Unit>.done() = this.complete(Unit)
+
 private fun CoroutineScope.afterDelay(
     delayInMillis: Long = 200,
     block: suspend () -> Unit
