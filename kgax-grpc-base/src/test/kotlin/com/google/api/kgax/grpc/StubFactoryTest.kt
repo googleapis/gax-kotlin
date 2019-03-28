@@ -36,7 +36,7 @@ class StubFactoryTest {
 
     @Test
     fun `creates stubs from factory`() {
-        val factory = StubFactory(TestStub::class, "localhost")
+        val factory = StubFactory(TestStub::class, "localhost", 8080)
         assertThat(factory.channel).isNotNull()
         factory.channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS)
     }

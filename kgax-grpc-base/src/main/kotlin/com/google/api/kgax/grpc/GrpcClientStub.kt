@@ -476,7 +476,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     fun stubWithContext(): T {
         // add gax interceptor
         var stub = originalStub
-            .withInterceptors(GAXInterceptor)
+            .withInterceptors(GAXInterceptor())
             .withOption(
                 ClientCallContext.KEY,
                 ClientCallContext()

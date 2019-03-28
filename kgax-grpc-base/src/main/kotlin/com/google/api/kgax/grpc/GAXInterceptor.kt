@@ -29,7 +29,7 @@ import io.grpc.MethodDescriptor
  * This interceptor is always attached to API calls and performs any
  * interceptor functionality required by this library, such as capture response metadata.
  */
-internal object GAXInterceptor : ClientInterceptor {
+internal class GAXInterceptor : ClientInterceptor {
 
     override fun <ReqT, RespT> interceptCall(
         method: MethodDescriptor<ReqT, RespT>,

@@ -59,7 +59,7 @@ class GAXInterceptorTest {
         whenever(callOptions.getOption(ClientCallContext.KEY))
             .doReturn(callContext)
 
-        GAXInterceptor.interceptCall(method, callOptions, channel)
+        GAXInterceptor().interceptCall(method, callOptions, channel)
             .start(responseListener, mock())
 
         val metadata = Metadata()
@@ -82,7 +82,7 @@ class GAXInterceptorTest {
         whenever(callOptions.getOption(ClientCallContext.KEY))
             .doReturn(callContext)
 
-        GAXInterceptor.interceptCall(method, callOptions, channel)
+        GAXInterceptor().interceptCall(method, callOptions, channel)
             .start(responseListener, mock())
 
         val metadata = Metadata()
@@ -109,7 +109,7 @@ class GAXInterceptorTest {
         whenever(callOptions.getOption(ClientCallContext.KEY))
             .doReturn(callContext)
 
-        GAXInterceptor.interceptCall(method, callOptions, channel)
+        GAXInterceptor().interceptCall(method, callOptions, channel)
             .start(responseListener, mock())
 
         val metadata = Metadata()
@@ -128,7 +128,7 @@ class GAXInterceptorTest {
         whenever(callOptions.getOption(ClientCallContext.KEY))
             .doReturn(callContext)
 
-        GAXInterceptor.interceptCall(method, callOptions, channel)
+        GAXInterceptor().interceptCall(method, callOptions, channel)
             .start(responseListener, mock())
 
         assertThat(callContext.responseMetadata.metadata).isNull()

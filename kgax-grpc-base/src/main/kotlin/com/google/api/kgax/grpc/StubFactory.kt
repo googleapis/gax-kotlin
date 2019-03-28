@@ -52,7 +52,7 @@ class StubFactory<T : AbstractStub<T>> {
      * This method will create a new channel via the [channel] property. Don't forget to call
      * [ManagedChannel.shutdown] to dispose of the channel when it is no longer needed.
      */
-    constructor(stubType: KClass<T>, host: String = "localhost", port: Int = 8080, enableRetry: Boolean = false) :
+    constructor(stubType: KClass<T>, host: String, port: Int, enableRetry: Boolean = false) :
         this(stubType, ManagedChannelBuilder.forAddress(host, port), {
             if (enableRetry) {
                 enableRetry()
