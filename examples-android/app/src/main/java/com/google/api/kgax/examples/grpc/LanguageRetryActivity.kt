@@ -43,7 +43,7 @@ class LanguageRetryActivity : AbstractExampleActivity<LanguageServiceGrpc.Langua
 
     override val factory = StubFactory(
         LanguageServiceGrpc.LanguageServiceFutureStub::class,
-        "language.googleapis.com"
+        "language.googleapis.com", 443
     )
 
     override val stub by lazy {

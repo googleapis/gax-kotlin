@@ -46,7 +46,7 @@ class SpeechActivity : AbstractExampleActivity<SpeechGrpc.SpeechFutureStub>(
         get() = Dispatchers.Main + job
 
     override val factory = StubFactory(
-        SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com"
+        SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com", 443
     )
 
     override val stub by lazy {
