@@ -44,7 +44,7 @@ dependencies {
 
     implementation("javax.annotation:javax.annotation-api:${ext["javax_annotation_version"]}")
 
-    implementation(project(":kgax-grpc"))
+    compile(project(":kgax-grpc"))
 
     testImplementation(kotlin("test"))
     testImplementation(kotlin("test-junit"))

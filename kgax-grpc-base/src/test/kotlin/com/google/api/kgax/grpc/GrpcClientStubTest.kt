@@ -39,6 +39,8 @@ import io.grpc.ClientCall
 import io.grpc.ClientInterceptor
 import io.grpc.stub.AbstractStub
 import io.grpc.stub.StreamObserver
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -293,9 +295,14 @@ class GrpcClientStubTest {
 
         // capture output stream
         val call = GrpcClientStub(stub, ClientCallOptions())
-        var outStream: StreamObserver<StringValue>? = null
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
-            outStream = outs
+            // fake output from server
+            outs.onNext(string("one"))
+            afterDelay {
+                outs.onNext(string("two"))
+                outs.onCompleted()
+            }
+
             return inStream
         }
 
@@ -307,10 +314,7 @@ class GrpcClientStubTest {
         result.requests.send(int32(1))
         result.requests.send(int32(2))
 
-        // fake output from server
-        outStream?.onNext(string("one"))
-        outStream?.onNext(string("two"))
-        outStream?.onCompleted()
+        result.join()
 
         verify(inStream).onNext(int32(1))
         verify(inStream).onNext(int32(2))
@@ -339,6 +343,8 @@ class GrpcClientStubTest {
         // close the steam
         result.responses.cancel()
 
+        result.join()
+
         verify(clientCall).cancel(any(), check {
             assertThat(it).isInstanceOf(CancellationException::class.java)
         })
@@ -366,10 +372,21 @@ class GrpcClientStubTest {
         val call =
             GrpcClientStub(stub, ClientCallOptions(retry = retry))
 
-        var outStream: StreamObserver<StringValue>? = null
+        // var outStream: StreamObserver<StringValue>? = null
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
-            outStream = outs
             timesExecuted++
+
+            // fake output from server
+            if (timesExecuted < 2) {
+                afterDelay { outs.onError(exception) }
+            } else if (timesExecuted < 3) {
+                outs.onError(exception)
+            } else {
+                outs.onNext(string("one"))
+                outs.onNext(string("two"))
+                afterDelay { outs.onCompleted() }
+            }
+
             return inStream
         }
 
@@ -378,15 +395,7 @@ class GrpcClientStubTest {
             ::method
         }
 
-        // fake output from server
-        outStream?.onError(exception)
-        delay(200)
-        outStream?.onError(exception)
-        delay(200)
-
-        outStream?.onNext(string("one"))
-        outStream?.onNext(string("two"))
-        outStream?.onCompleted()
+        result.join()
 
         verify(inStream).onCompleted()
         assertThat(result.responses.map { it.value }.toList()).containsExactly("one", "two").inOrder()
@@ -414,10 +423,16 @@ class GrpcClientStubTest {
             GrpcClientStub(stub, ClientCallOptions(retry = retry))
 
         var timesExecuted = 0
-        var outStream: StreamObserver<StringValue>? = null
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
-            outStream = outs
             timesExecuted++
+
+            // fake output from server
+            afterDelay {
+                outs.onNext(string("result"))
+                outs.onError(exception1)
+                outs.onCompleted()
+            }
+
             return inStream
         }
 
@@ -426,10 +441,7 @@ class GrpcClientStubTest {
             ::method
         }
 
-        // fake output from server
-        outStream?.onNext(string("result"))
-        outStream?.onError(exception1)
-        outStream?.onCompleted()
+        result.join()
 
         verify(inStream).onCompleted()
         assertFailsWith<RuntimeException>("bad times") {
@@ -448,16 +460,25 @@ class GrpcClientStubTest {
 
         // capture output stream
         val call = GrpcClientStub(stub, ClientCallOptions())
-        val method = { _: StreamObserver<StringValue> -> inStream }
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            // fake output from server
+            afterDelay {
+                outs.onCompleted()
+            }
+
+            return inStream
+        }
 
         val result = call.executeStreaming { arg ->
             assertThat(arg).isEqualTo(stub)
-            method
+            ::method
         }
 
         result.requests.send(int32(5))
         result.requests.send(int32(55))
         result.requests.close()
+
+        result.join()
 
         verify(inStream).onNext(int32(5))
         verify(inStream).onNext(int32(55))
@@ -475,15 +496,25 @@ class GrpcClientStubTest {
                 initialRequests = listOf(int32(9), int32(99))
             )
         )
-        val method = { _: StreamObserver<StringValue> -> inStream }
+
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            // fake output from server
+            afterDelay {
+                outs.onCompleted()
+            }
+
+            return inStream
+        }
 
         val result = call.executeStreaming { arg ->
             assertThat(arg).isEqualTo(stub)
-            method
+            ::method
         }
 
         result.requests.send(int32(0))
         result.requests.close()
+
+        result.join()
 
         verify(inStream).onNext(int32(9))
         verify(inStream).onNext(int32(99))
@@ -499,9 +530,17 @@ class GrpcClientStubTest {
 
             // capture output stream
             val call = GrpcClientStub(stub, ClientCallOptions())
-            var outStream: StreamObserver<StringValue>? = null
             fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
-                outStream = outs
+                // fake output from server
+                afterDelay {
+                    if (ex != null) {
+                        outs.onError(ex)
+                    } else {
+                        outs.onNext(string("abc"))
+                    }
+                    outs.onCompleted()
+                }
+
                 return inStream
             }
 
@@ -513,13 +552,7 @@ class GrpcClientStubTest {
             result.requests.send(int32(10))
             result.requests.send(int32(20))
 
-            // fake output from server
-            if (ex != null) {
-                outStream?.onError(ex)
-            } else {
-                outStream?.onNext(string("abc"))
-            }
-            outStream?.onCompleted()
+            result.join()
 
             verify(inStream).onNext(int32(10))
             verify(inStream).onNext(int32(20))
@@ -552,10 +585,22 @@ class GrpcClientStubTest {
         // capture output stream
         val call =
             GrpcClientStub(stub, ClientCallOptions(retry = retry))
-        var outStream: StreamObserver<StringValue>? = null
+
+        val canSend = waiter()
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
-            outStream = outs
             timesExecuted++
+
+            // fake output from server
+            if (timesExecuted < 2) {
+                outs.onError(exception)
+            } else {
+                canSend.done()
+                afterDelay {
+                    outs.onNext(string("xyz"))
+                    outs.onCompleted()
+                }
+            }
+
             return inStream
         }
 
@@ -564,14 +609,12 @@ class GrpcClientStubTest {
             ::method
         }
 
+        canSend.await()
+
         result.requests.send(int32(1))
         result.requests.send(int32(2))
 
-        // fake output from server
-        outStream?.onError(exception)
-        delay(200)
-        outStream?.onNext(string("xyz"))
-        outStream?.onCompleted()
+        result.join()
 
         verify(inStream).onNext(int32(1))
         verify(inStream).onNext(int32(2))
@@ -579,6 +622,61 @@ class GrpcClientStubTest {
 
         assertThat(retry.executed).isTrue()
         assertThat(timesExecuted).isEqualTo(2)
+    }
+
+    @Test
+    fun `Does not retry a client streaming call after send`() = runBlocking<Unit> {
+        val stub: TestStub = createTestStubMock()
+        val inStream: StreamObserver<Int32Value> = mock()
+        val exception = RuntimeException("it failed")
+        var timesExecuted = 0
+
+        val retry = object : Retry {
+            var executed = false
+
+            override fun retryAfter(error: Throwable, context: RetryContext): Long? {
+                assertThat(error).isEqualTo(exception)
+                assertThat(context.numberOfAttempts).isEqualTo(timesExecuted - 1)
+                executed = true
+                return 50
+            }
+        }
+
+        // capture output stream
+        val call =
+            GrpcClientStub(stub, ClientCallOptions(retry = retry))
+
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            timesExecuted++
+
+            // fake output from server
+            afterDelay {
+                if (timesExecuted < 2) {
+                    outs.onError(exception)
+                } else {
+                    outs.onNext(string("xyz"))
+                    outs.onCompleted()
+                }
+            }
+
+            return inStream
+        }
+
+        val result = call.executeClientStreaming { arg ->
+            assertThat(arg).isEqualTo(stub)
+            ::method
+        }
+
+        result.requests.send(int32(100))
+        result.requests.send(int32(200))
+
+        result.join()
+
+        verify(inStream).onNext(int32(100))
+        verify(inStream).onNext(int32(200))
+
+        assertThat(retry.executed).isFalse()
+        assertThat(timesExecuted).isEqualTo(1)
     }
 
     @Test
@@ -593,11 +691,16 @@ class GrpcClientStubTest {
         }
 
         // capture output stream
-        val call =
-            GrpcClientStub(stub, ClientCallOptions(retry = retry))
-        var outStream: StreamObserver<StringValue>? = null
+        val call = GrpcClientStub(stub, ClientCallOptions(retry = retry))
+
         fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
-            outStream = outs
+            // fake output from server
+            afterDelay {
+                outs.onNext(string("xyz"))
+                outs.onError(RuntimeException("it failed"))
+                outs.onCompleted()
+            }
+
             return inStream
         }
 
@@ -609,11 +712,7 @@ class GrpcClientStubTest {
         result.requests.send(int32(1))
         result.requests.send(int32(2))
 
-        // fake output from server
-        outStream?.onNext(string("xyz"))
-        outStream?.onError(RuntimeException("it failed"))
-        delay(200)
-        outStream?.onCompleted()
+        result.join()
 
         verify(inStream).onNext(int32(1))
         verify(inStream).onNext(int32(2))
@@ -627,16 +726,24 @@ class GrpcClientStubTest {
 
         // capture output stream
         val call = GrpcClientStub(stub, ClientCallOptions())
-        val method = { _: StreamObserver<StringValue> -> inStream }
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            afterDelay {
+                outs.onCompleted()
+            }
+
+            return inStream
+        }
 
         val result = call.executeClientStreaming { arg ->
             assertThat(arg).isEqualTo(stub)
-            method
+            ::method
         }
 
         result.requests.send(int32(5))
         result.requests.send(int32(55))
         result.requests.close()
+
+        result.join()
 
         verify(inStream).onNext(int32(5))
         verify(inStream).onNext(int32(55))
@@ -654,15 +761,26 @@ class GrpcClientStubTest {
                 initialRequests = listOf(int32(1), int32(2))
             )
         )
-        val method = { _: StreamObserver<StringValue> -> inStream }
+
+        fun method(outs: StreamObserver<StringValue>): StreamObserver<Int32Value> {
+            // fake output from the server
+            outs.onNext(string("hi!"))
+            afterDelay {
+                outs.onCompleted()
+            }
+
+            return inStream
+        }
 
         val result = call.executeClientStreaming { arg ->
             assertThat(arg).isEqualTo(stub)
-            method
+            ::method
         }
 
         result.requests.send(int32(100))
         result.requests.close()
+
+        result.join()
 
         verify(inStream).onNext(int32(1))
         verify(inStream).onNext(int32(2))
@@ -676,16 +794,18 @@ class GrpcClientStubTest {
 
         // capture output stream
         val call = GrpcClientStub(stub, ClientCallOptions())
-        var outStream: StreamObserver<StringValue>? = null
-        val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
+        val result = call.executeServerStreaming { it, outs: StreamObserver<StringValue> ->
             assertThat(it).isEqualTo(stub)
-            outStream = observer
+
+            // fake output from server
+            outs.onNext(string("one"))
+            afterDelay {
+                outs.onNext(string("two"))
+                outs.onCompleted()
+            }
         }
 
-        // fake output from server
-        outStream?.onNext(string("one"))
-        outStream?.onNext(string("two"))
-        outStream?.onCompleted()
+        result.join()
 
         assertThat(result.responses.map { it.value }.toList()).containsExactly("one", "two").inOrder()
         assertThat(result.responses.isClosedForReceive).isTrue()
@@ -704,6 +824,8 @@ class GrpcClientStubTest {
 
         // close the steam
         result.responses.cancel()
+
+        result.join()
 
         verify(clientCall).cancel(any(), check {
             assertThat(it).isInstanceOf(CancellationException::class.java)
@@ -728,22 +850,23 @@ class GrpcClientStubTest {
         // capture output stream
         val call =
             GrpcClientStub(stub, ClientCallOptions(retry = retry))
-        var outStream: StreamObserver<StringValue>? = null
-        val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
+        val result = call.executeServerStreaming { it, outs: StreamObserver<StringValue> ->
             assertThat(it).isEqualTo(stub)
             timesExecuted++
-            outStream = observer
+
+            // fake output from server
+            afterDelay {
+                if (timesExecuted < 3) {
+                    outs.onError(RuntimeException())
+                } else {
+                    outs.onNext(string("one"))
+                    outs.onNext(string("two"))
+                    outs.onCompleted()
+                }
+            }
         }
 
-        outStream?.onError(RuntimeException())
-        delay(200)
-        outStream?.onError(RuntimeException())
-        delay(200)
-
-        // fake output from server
-        outStream?.onNext(string("one"))
-        outStream?.onNext(string("two"))
-        outStream?.onCompleted()
+        result.join()
 
         assertThat(result.responses.map { it.value }.toList()).containsExactly("one", "two").inOrder()
         assertThat(result.responses.isClosedForReceive).isTrue()
@@ -766,17 +889,19 @@ class GrpcClientStubTest {
         // capture output stream
         val call =
             GrpcClientStub(stub, ClientCallOptions(retry = retry))
-        var outStream: StreamObserver<StringValue>? = null
-        val result = call.executeServerStreaming { it, observer: StreamObserver<StringValue> ->
+        val result = call.executeServerStreaming { it, outs: StreamObserver<StringValue> ->
             assertThat(it).isEqualTo(stub)
             timesExecuted++
-            outStream = observer
+
+            // fake output from server
+            outs.onNext(string("one"))
+            afterDelay {
+                outs.onNext(string("two"))
+                outs.onCompleted()
+            }
         }
 
-        // fake output from server
-        outStream?.onNext(string("one"))
-        outStream?.onNext(string("two"))
-        outStream?.onCompleted()
+        result.join()
 
         assertThat(result.responses.map { it.value }.toList()).containsExactly("one", "two").inOrder()
         assertThat(result.responses.isClosedForReceive).isTrue()
@@ -866,6 +991,28 @@ class GrpcClientStubTest {
     }
 
     @Test
+    fun `can be prepared directly`() {
+        val stub = createTestStubMock()
+        val otherStub = stub.prepare(
+            ClientCallOptions(
+                requestMetadata = mapOf(
+                    "a" to listOf("one", "two"),
+                    "other" to listOf()
+                )
+            )
+        )
+
+        assertThat(stub).isNotEqualTo(otherStub)
+        assertThat(otherStub.options.requestMetadata)
+            .containsExactlyEntriesIn(
+                mapOf(
+                    "a" to listOf("one", "two"),
+                    "other" to listOf()
+                )
+            )
+    }
+
+    @Test
     fun `can be directly prepared`() {
         val stub: TestStub = createTestStubMock()
 
@@ -921,4 +1068,17 @@ class GrpcClientStubTest {
             return TestStub(channel, options)
         }
     }
+}
+
+// helpers for waiting during tests
+private fun waiter() = CompletableDeferred<Unit>()
+
+private fun CompletableDeferred<Unit>.done() = this.complete(Unit)
+
+private fun CoroutineScope.afterDelay(
+    delayInMillis: Long = 200,
+    block: suspend () -> Unit
+) = launch {
+    delay(delayInMillis)
+    block()
 }

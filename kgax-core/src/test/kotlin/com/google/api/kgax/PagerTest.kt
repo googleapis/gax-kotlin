@@ -18,6 +18,7 @@ package com.google.api.kgax
 
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlin.test.Test
@@ -99,10 +100,13 @@ class PagerTest {
 
         val results = mutableListOf<String>()
 
-        repeat(3) {
+        repeat(3) { idx ->
             var page = pager.receive()
             results.addAll(page.elements)
-            assertThat(pager.isEmpty).isTrue()
+
+            delay(200)
+            assertThat(results.size).isEqualTo((idx + 1) * 2)
+            assertThat(pager.isClosedForReceive).isEqualTo(idx == 2)
         }
 
         assertThat(results).containsExactly("one", "two", "three", "four", "five", "six").inOrder()

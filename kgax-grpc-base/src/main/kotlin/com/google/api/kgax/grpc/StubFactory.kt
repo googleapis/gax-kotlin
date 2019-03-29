@@ -52,7 +52,7 @@ class StubFactory<T : AbstractStub<T>> {
      * This method will create a new channel via the [channel] property. Don't forget to call
      * [ManagedChannel.shutdown] to dispose of the channel when it is no longer needed.
      */
-    constructor(stubType: KClass<T>, host: String, port: Int = 443, enableRetry: Boolean = false) :
+    constructor(stubType: KClass<T>, host: String, port: Int, enableRetry: Boolean = false) :
         this(stubType, ManagedChannelBuilder.forAddress(host, port), {
             if (enableRetry) {
                 enableRetry()
@@ -87,6 +87,11 @@ class StubFactory<T : AbstractStub<T>> {
     }
 
     /**
+     * Create a new stub.
+     */
+    fun newStub() = fromCallCredentials()
+
+    /**
      * Creates a stub from a service account JSON [keyFile] with the provided [oauthScopes].
      */
     fun fromServiceAccount(keyFile: InputStream, oauthScopes: List<String>) =
@@ -106,7 +111,7 @@ class StubFactory<T : AbstractStub<T>> {
             )
         )
 
-    internal fun fromCallCredentials(credentials: CallCredentials): GrpcClientStub<T> {
+    internal fun fromCallCredentials(credentials: CallCredentials? = null): GrpcClientStub<T> {
         // instantiate stub
         try {
             val constructor = stubType.java

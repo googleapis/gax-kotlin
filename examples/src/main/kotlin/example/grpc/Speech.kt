@@ -41,7 +41,7 @@ import java.io.File
 fun speechExample(credentials: String) = runBlocking {
     // create a stub factory
     val factory = StubFactory(
-        SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com"
+        SpeechGrpc.SpeechFutureStub::class, "speech.googleapis.com", 443
     )
 
     // create a stub

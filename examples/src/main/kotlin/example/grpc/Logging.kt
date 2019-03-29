@@ -46,7 +46,7 @@ fun loggingExample(credentials: String) = runBlocking {
     // create a stub factory
     val factory = StubFactory(
         LoggingServiceV2Grpc.LoggingServiceV2FutureStub::class,
-        "logging.googleapis.com"
+        "logging.googleapis.com", 443
     )
 
     // create a stub

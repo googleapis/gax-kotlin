@@ -21,7 +21,7 @@ import org.jetbrains.dokka.gradle.PackageOptions
 plugins {
     idea
     maven
-    kotlin("jvm") version "1.3.0"
+    kotlin("jvm") version "1.3.21"
     id("org.jetbrains.dokka") version "0.9.17"
     id("jacoco")
 }
@@ -34,6 +34,8 @@ dependencies {
     compile(project(":kgax-grpc-android"))
 
     compile(project(":examples"))
+
+    compile(project(":showcase-test"))
 }
 
 base {
@@ -69,9 +71,6 @@ allprojects {
         google()
         mavenCentral()
         jcenter()
-
-        // temporary
-        maven(url = "https://jitpack.io")
     }
 }
 
@@ -79,7 +78,7 @@ subprojects {
     val ktlintImplementation by configurations.creating
 
     dependencies {
-        ktlintImplementation("com.github.shyiko:ktlint:0.29.0")
+        ktlintImplementation("com.github.shyiko:ktlint:0.30.0")
     }
 
     afterEvaluate {

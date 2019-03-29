@@ -39,7 +39,7 @@ class LanguageActivity : AbstractExampleActivity<LanguageServiceGrpc.LanguageSer
 
     override val factory = StubFactory(
         LanguageServiceGrpc.LanguageServiceFutureStub::class,
-        "language.googleapis.com"
+        "language.googleapis.com", 443
     )
 
     override val stub by lazy {

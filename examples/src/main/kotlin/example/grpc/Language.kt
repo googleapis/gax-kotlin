@@ -36,7 +36,7 @@ fun languageExample(credentials: String) = runBlocking {
     // create a stub factory
     val factory = StubFactory(
         LanguageServiceGrpc.LanguageServiceFutureStub::class,
-        "language.googleapis.com"
+        "language.googleapis.com", 443
     )
 
     // create a stub

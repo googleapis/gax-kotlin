@@ -48,7 +48,7 @@ import javax.sound.sampled.TargetDataLine
 fun speechStreamingExample(credentials: String) = runBlocking {
     // create a stub factory
     val factory = StubFactory(
-        SpeechGrpc.SpeechStub::class, "speech.googleapis.com"
+        SpeechGrpc.SpeechStub::class, "speech.googleapis.com", 443
     )
 
     // create a stub

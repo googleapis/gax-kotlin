@@ -56,7 +56,7 @@ class SpeechStreamingActivity : AbstractExampleActivity<SpeechGrpc.SpeechStub>(
     private var streams: SpeechStreams? = null
 
     override val factory = StubFactory(
-        SpeechGrpc.SpeechStub::class, "speech.googleapis.com"
+        SpeechGrpc.SpeechStub::class, "speech.googleapis.com", 443
     )
 
     override val stub by lazy {
