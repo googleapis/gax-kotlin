@@ -714,7 +714,7 @@ private class ServerStreamer<RespT>(
  *          request.toBuilder().setPageToken(token).build()
  *      }
  *      nextPage = { response ->
- *          page(response.entriesList, response.nextPageToken)
+ *          Page(response.entriesList, response.nextPageToken)
  *      }
  *  }
  *
