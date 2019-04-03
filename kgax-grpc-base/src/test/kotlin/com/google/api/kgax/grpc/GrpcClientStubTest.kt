@@ -1045,9 +1045,9 @@ class GrpcClientStubTest {
                 initialRequest = {
                     request
                 },
-                nextRequest = { request, token ->
-                    assertThat(request).isEqualTo(request)
-                    PagedRequestType(request.query, token)
+                nextRequest = { r, token ->
+                    assertThat(r).isEqualTo(request)
+                    PagedRequestType(r.query, token)
                 },
                 nextPage = { response ->
                     count++

@@ -27,7 +27,7 @@ import io.grpc.MethodDescriptor
 
 /**
  * This interceptor is always attached to API calls and performs any
- * interceptor functionality required by this library, such as capture response metadata.
+ * interceptor functionality required by this library, such as capturing response metadata.
  */
 internal object GAXInterceptor : ClientInterceptor {
 
