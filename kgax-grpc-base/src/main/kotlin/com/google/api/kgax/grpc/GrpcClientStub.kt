@@ -635,6 +635,14 @@ class ClientCallOptions constructor(
 
         /**
          * Capture the trailing response headers during the request and pass them to the [handler].
+         */
+        fun onResponseMetadata(handler: (ResponseMetadata) -> Unit) {
+            responseMetadataHandler = (handler as (Any) -> Unit)
+            responseMetadataFactory = { m -> ResponseMetadata(m) }
+        }
+
+        /**
+         * Capture the trailing response headers during the request and pass them to the [handler].
          *
          * You may customize the way headers are handled by providing a custom [factory] and
          * subclassing [ResponseMetadata].

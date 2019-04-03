@@ -88,7 +88,7 @@ class SpeechActivity : AbstractExampleActivity<SpeechGrpc.SpeechFutureStub>(
 
             // wait for the response to complete
             Log.i(TAG, "Waiting for long running operation...")
-            val (response, _) = lro.await()
+            val response = lro.await()
 
             Log.i(TAG, "Operation completed: ${lro.operation?.name}")
             updateUIWithExampleResult(response.toString())
