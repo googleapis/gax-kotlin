@@ -24,12 +24,12 @@ import io.grpc.Metadata
  * You may subclass this class in order to provide additional convenience methods
  * if the API has well known metadata key/value pairs.
  */
-open class ResponseMetadata {
+open class ResponseMetadata(metadata: Metadata? = null) {
 
-    internal var metadata: Metadata? = null
+    internal var metadata: Metadata? = metadata
 
     /** All keys in the body metadata */
-    fun keys() = metadata?.keys()?.toList() ?: listOf()
+    open fun keys(): List<String> = metadata?.keys()?.toList() ?: listOf()
 
     /** All values for the key */
     open fun getAll(key: String): Iterable<String>? {

@@ -72,7 +72,7 @@ fun speechExample(credentials: String) = runBlocking {
 
     // wait for the response to complete
     println("Waiting for long running operation...")
-    val (response, _) = lro.await()
+    val response = lro.await()
 
     println("Operation completed: ${lro.operation?.name} with result:\n$response")
 

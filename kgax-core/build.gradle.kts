@@ -18,6 +18,7 @@ plugins {
     idea
     maven
     kotlin("jvm")
+    `java-library`
 }
 
 dependencies {

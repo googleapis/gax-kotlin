@@ -21,7 +21,7 @@ import kotlinx.coroutines.Deferred
 
 /** Resolves long running operations. */
 abstract class LongRunningCallBase<T : MessageLite, OpT>(
-    private val deferred: Deferred<CallResult<OpT>>,
+    private val deferred: Deferred<OpT>,
     private val responseType: Class<T>
 ) {
     /** the underlying operation (null until the operation has completed) */
@@ -40,30 +40,24 @@ abstract class LongRunningCallBase<T : MessageLite, OpT>(
         }
 
     /** Wait until the operation has been completed. */
-    suspend fun await(): CallResult<T> {
-        var metadata: ResponseMetadata? = null
-
-        operation = deferred.await().body
+    suspend fun await(): T {
+        operation = deferred.await()
         while (!isOperationDone(operation!!)) {
             try {
                 // try again
                 val result = nextOperation(operation!!)
 
                 // save result of last call
-                operation = result.body
-                metadata = result.metadata
+                operation = result
             } catch (e: InterruptedException) {
                 /* ignore and try again */
             }
         }
 
-        return CallResult(
-            parse(operation!!, responseType),
-            metadata ?: ResponseMetadata()
-        )
+        return parse(operation!!, responseType)
     }
 
-    protected abstract suspend fun nextOperation(op: OpT): CallResult<OpT>
+    protected abstract suspend fun nextOperation(op: OpT): OpT
     protected abstract fun isOperationDone(op: OpT): Boolean
     protected abstract fun parse(operation: OpT, type: Class<T>): T
 }

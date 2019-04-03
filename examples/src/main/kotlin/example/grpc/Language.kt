@@ -56,7 +56,7 @@ fun languageExample(credentials: String) = runBlocking {
         )
     }
 
-    println("The API says: ${response.body}")
+    println("The API says: $response")
 
     // shutdown all connections
     factory.shutdown()

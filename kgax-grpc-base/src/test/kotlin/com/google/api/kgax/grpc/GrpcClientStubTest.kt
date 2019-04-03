@@ -16,11 +16,11 @@
 
 package com.google.api.kgax.grpc
 
+import com.google.api.kgax.Page
 import com.google.api.kgax.Retry
 import com.google.api.kgax.RetryContext
 import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.SettableFuture
-import com.google.protobuf.Empty
 import com.google.protobuf.Int32Value
 import com.google.protobuf.StringValue
 import com.nhaarman.mockito_kotlin.any
@@ -37,6 +37,7 @@ import io.grpc.CallOptions
 import io.grpc.Channel
 import io.grpc.ClientCall
 import io.grpc.ClientInterceptor
+import io.grpc.Metadata
 import io.grpc.stub.AbstractStub
 import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.CompletableDeferred
@@ -62,7 +63,7 @@ private fun string(value: String): StringValue = StringValue.newBuilder().setVal
 private fun int32(value: Int): Int32Value = Int32Value.newBuilder().setValue(value).build()
 
 private data class PagedRequestType(val query: String, val token: String? = null)
-private typealias PagedResponseType = PageWithMetadata<Int>
+private typealias PagedResponseType = Page<Int>
 
 @ExperimentalCoroutinesApi
 class GrpcClientStubTest {
@@ -70,12 +71,11 @@ class GrpcClientStubTest {
     private val channel: Channel = mock()
     private val clientCall: ClientCall<*, *> = mock()
     private val callOptions: CallOptions = mock()
-    private val responseMetadata: ResponseMetadata = mock()
     private val callContext: ClientCallContext = mock()
 
     @BeforeTest
     fun before() {
-        reset(channel, clientCall, callOptions, responseMetadata, callContext)
+        reset(channel, clientCall, callOptions, callContext)
     }
 
     @Test
@@ -100,6 +100,123 @@ class GrpcClientStubTest {
         assertThat(options.requestMetadata).containsExactlyEntriesIn(
             mapOf("bar" to listOf("1", "2"))
         )
+    }
+
+    @Test
+    fun `ClientCallOptions can capture headers`() = runBlocking<Unit> {
+        val stub: TestStub = createTestStubMock()
+        val future = SettableFuture.create<Int32Value>()
+        future.set(int32(12345))
+
+        var gotHeaders = false
+        val call = GrpcClientStub(
+            stub, clientCallOptions {
+                onResponseMetadata { metadata: ResponseMetadata ->
+                    gotHeaders = true
+                    assertThat(metadata.keys()).containsExactly("yek")
+                    assertThat(metadata.get("yek")).isEqualTo("a key")
+                    assertThat(metadata.getAll("yek")).containsExactly("a key")
+                    assertThat(metadata.get("key")).isNull()
+                    assertThat(metadata.getAll("key")).isNull()
+                }
+            }
+        )
+
+        val result = call.execute { arg ->
+            verify(arg).withOption(eq(ClientCallContext.KEY), check { ctx ->
+                with(Metadata()) {
+                    put(Metadata.Key.of("yek", Metadata.ASCII_STRING_MARSHALLER), "a key")
+                    ctx.onResponseHeaders(this)
+                }
+            })
+            future
+        }
+        assertThat(gotHeaders).isTrue()
+        assertThat(result.value).isEqualTo(12345)
+    }
+
+    @Test
+    fun `ClientCallOptions can capture multiple headers`() = runBlocking<Unit> {
+        val stub: TestStub = createTestStubMock()
+        val future = SettableFuture.create<Int32Value>()
+        future.set(int32(12345))
+
+        var gotHeaders = false
+        val call = GrpcClientStub(
+            stub, clientCallOptions {
+                onResponseMetadata { metadata: ResponseMetadata ->
+                    gotHeaders = true
+                    assertThat(metadata.keys()).containsExactly("one", "two", "three")
+                    assertThat(metadata.get("one")).isEqualTo("111")
+                    assertThat(metadata.getAll("one")).containsExactly("1", "11", "111").inOrder()
+                    assertThat(metadata.get("two")).isEqualTo("22")
+                    assertThat(metadata.getAll("two")).containsExactly("2", "22").inOrder()
+                    assertThat(metadata.get("three")).isEqualTo("3")
+                    assertThat(metadata.getAll("three")).containsExactly("3").inOrder()
+                }
+            }
+        )
+
+        val result = call.execute { arg ->
+            verify(arg).withOption(eq(ClientCallContext.KEY), check { ctx ->
+                with(Metadata()) {
+                    put(Metadata.Key.of("one", Metadata.ASCII_STRING_MARSHALLER), "1")
+                    put(Metadata.Key.of("one", Metadata.ASCII_STRING_MARSHALLER), "11")
+                    put(Metadata.Key.of("one", Metadata.ASCII_STRING_MARSHALLER), "111")
+                    put(Metadata.Key.of("two", Metadata.ASCII_STRING_MARSHALLER), "2")
+                    put(Metadata.Key.of("two", Metadata.ASCII_STRING_MARSHALLER), "22")
+                    put(Metadata.Key.of("three", Metadata.ASCII_STRING_MARSHALLER), "3")
+                    ctx.onResponseHeaders(this)
+                }
+            })
+            future
+        }
+        assertThat(gotHeaders).isTrue()
+        assertThat(result.value).isEqualTo(12345)
+    }
+
+    @Test
+    fun `ClientCallOptions can capture customized headers`() = runBlocking<Unit> {
+        class MyMetadata(metadata: Metadata) : ResponseMetadata(metadata) {
+            val yek: String
+                get() = get("yek")!!
+            val all: List<String>
+                get() = getAll("yek")!!.toList()
+        }
+
+        val stub: TestStub = createTestStubMock()
+        val future = SettableFuture.create<Int32Value>()
+        future.set(int32(12345))
+
+        var gotHeaders = false
+        val call = GrpcClientStub(
+            stub, clientCallOptions {
+                onResponseMetadata(factory = {
+                    m -> MyMetadata(m)
+                }) { metadata: MyMetadata ->
+                    gotHeaders = true
+                    assertThat(metadata.keys()).containsExactly("yek")
+                    assertThat(metadata.get("yek")).isEqualTo("a key")
+                    assertThat(metadata.yek).isEqualTo("a key")
+                    assertThat(metadata.getAll("yek")).containsExactly("a key")
+                    assertThat(metadata.all).containsExactly("a key")
+                    assertThat(metadata.get("key")).isNull()
+                    assertThat(metadata.getAll("key")).isNull()
+                }
+            }
+        )
+
+        val result = call.execute { arg ->
+            verify(arg).withOption(eq(ClientCallContext.KEY), check { ctx ->
+                with(Metadata()) {
+                    put(Metadata.Key.of("yek", Metadata.ASCII_STRING_MARSHALLER), "a key")
+                    ctx.onResponseHeaders(this)
+                }
+            })
+            future
+        }
+        assertThat(gotHeaders).isTrue()
+        assertThat(result.value).isEqualTo(12345)
     }
 
     @Test
@@ -187,7 +304,7 @@ class GrpcClientStubTest {
             assertThat(arg).isEqualTo(stub)
             future
         }
-        assertThat(result.body.value).isEqualTo("hi")
+        assertThat(result.value).isEqualTo("hi")
     }
 
     @Test(expected = IllegalStateException::class)
@@ -259,7 +376,7 @@ class GrpcClientStubTest {
             }
         }
 
-        assertThat(result.body.value).isEqualTo("hi again")
+        assertThat(result.value).isEqualTo("hi again")
         assertThat(retry.executed).isTrue()
     }
 
@@ -912,13 +1029,12 @@ class GrpcClientStubTest {
     @Test
     fun `can be paged`() = runBlocking<Unit> {
         val request = PagedRequestType("1")
-        val metadata = List(3) { ResponseMetadata() }
 
         suspend fun method(request: PagedRequestType) = withContext(Dispatchers.Default) {
             when (request.token) {
-                null -> PagedResponseType(listOf(1, 2), "first", metadata[0])
-                "first" -> PagedResponseType(listOf(3, 4), "second", metadata[1])
-                else -> PagedResponseType(listOf(5, 6), "", metadata[2])
+                null -> Page(listOf(1, 2), "first")
+                "first" -> Page(listOf(3, 4), "second")
+                else -> Page(listOf(5, 6), "")
             }
         }
 
@@ -935,20 +1051,17 @@ class GrpcClientStubTest {
                 },
                 nextPage = { response ->
                     count++
-                    PagedResponseType(response.elements, response.token, response.metadata)
+                    Page(response.elements, response.token!!)
                 }
             )
 
         val results = mutableListOf<Int>()
-        val resultMetadata = mutableListOf<ResponseMetadata>()
         for (page in pager) {
             for (entry in page.elements) {
                 results.add(entry)
             }
-            resultMetadata.add(page.metadata)
         }
         assertThat(results).containsExactly(1, 2, 3, 4, 5, 6).inOrder()
-        assertThat(resultMetadata).containsExactlyElementsIn(metadata).inOrder()
     }
 
     @Test
@@ -1040,14 +1153,6 @@ class GrpcClientStubTest {
             .containsExactly(string("init!"))
     }
 
-    @Test
-    fun `can map a call result`() {
-        val metadata = ResponseMetadata()
-        val result = CallResult(Empty.getDefaultInstance(), metadata)
-        assertThat(result.map { Unit }).isEqualTo(CallResult(Unit, metadata))
-        assertThat(result.map { "body" }).isEqualTo(CallResult("body", metadata))
-    }
-
     private fun createTestStubMock(): TestStub {
         val stub: TestStub = mock()
         whenever(stub.channel).thenReturn(channel)
@@ -1057,7 +1162,6 @@ class GrpcClientStubTest {
         whenever(stub.callOptions).thenReturn(callOptions)
         whenever(callOptions.getOption(eq(ClientCallContext.KEY))).thenReturn(callContext)
         whenever(callContext.call).thenReturn(clientCall)
-        whenever(callContext.responseMetadata).thenReturn(responseMetadata)
         return stub
     }
 

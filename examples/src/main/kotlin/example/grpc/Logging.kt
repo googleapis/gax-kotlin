@@ -17,8 +17,7 @@
 package example.grpc
 
 import com.google.api.MonitoredResource
-import com.google.api.kgax.grpc.CallResult
-import com.google.api.kgax.grpc.PageWithMetadata
+import com.google.api.kgax.Page
 import com.google.api.kgax.grpc.StubFactory
 import com.google.api.kgax.grpc.pager
 import com.google.logging.v2.ListLogEntriesRequest
@@ -110,12 +109,8 @@ fun loggingExample(credentials: String) = runBlocking {
         nextRequest = { request, token ->
             request.toBuilder().apply { pageToken = token }.build()
         },
-        nextPage = { r: CallResult<ListLogEntriesResponse> ->
-            PageWithMetadata<LogEntry>(
-                r.body.entriesList,
-                r.body.nextPageToken,
-                r.metadata
-            )
+        nextPage = { r: ListLogEntriesResponse ->
+            Page(r.entriesList, r.nextPageToken)
         }
     )
 

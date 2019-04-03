@@ -26,11 +26,6 @@ import kotlin.test.Test
 private data class RequestType(val query: Int, val token: String? = null)
 private data class ResponseType(val items: List<String>, val token: String? = null)
 
-private data class TestPage(
-    override val elements: Iterable<String>,
-    override val token: String? = null
-) : Page<String, String>
-
 class PagerTest {
 
     @Test
@@ -57,7 +52,7 @@ class PagerTest {
                 },
                 nextPage = { response ->
                     count++
-                    TestPage(response.items, response.token)
+                    Page(response.items, response.token)
                 }
             )
 
@@ -94,7 +89,7 @@ class PagerTest {
             },
             nextPage = { response ->
                 count++
-                TestPage(response.items, response.token)
+                Page(response.items, response.token)
             }
         )
 
@@ -127,7 +122,7 @@ class PagerTest {
                     RequestType(request.query, token)
                 },
                 nextPage = { response ->
-                    TestPage(response.items, response.token)
+                    Page(response.items, response.token)
                 }
             )
 
@@ -154,7 +149,7 @@ class PagerTest {
                     RequestType(request.query, token)
                 },
                 nextPage = { response ->
-                    TestPage(response.items)
+                    Page(response.items, null)
                 }
             )
 
