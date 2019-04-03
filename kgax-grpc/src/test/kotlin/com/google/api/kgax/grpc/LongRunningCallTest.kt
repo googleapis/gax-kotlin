@@ -44,15 +44,13 @@ class LongRunningCallTest {
 
     private val channel: Channel = mock()
     private val clientCall: ClientCall<*, *> = mock()
-    private val callOptions: CallOptions = mock()
-    private val responseMetadata: ResponseMetadata = mock()
     private val callContext: ClientCallContext = mock()
 
     private fun StringValue(str: String) = StringValue.newBuilder().setValue(str).build()
 
     @BeforeTest
     fun before() {
-        reset(channel, clientCall, callOptions, responseMetadata, callContext)
+        reset(channel, clientCall, callContext)
     }
 
     @Test
@@ -103,18 +101,16 @@ class LongRunningCallTest {
                 GrpcClientStub(opStub, ClientCallOptions())
 
             val deferred = CompletableDeferred(
-                CallResult(
-                    Operation.newBuilder()
-                        .setName("test_op")
-                        .setDone(false)
-                        .build(), mock()
-                )
+                Operation.newBuilder()
+                    .setName("test_op")
+                    .setDone(false)
+                    .build()
             )
             val lro = LongRunningCall(grpcClient, deferred, StringValue::class.java)
 
             if (futureDone == futureDoneOk) {
                 val result = lro.await()
-                assertThat(result.body).isEqualTo(StringValue("long time"))
+                assertThat(result).isEqualTo(StringValue("long time"))
             } else {
                 var error: Throwable? = null
                 try {
@@ -138,12 +134,11 @@ class LongRunningCallTest {
 
         val call = GrpcClientStub(stub, ClientCallOptions())
         val result = call.executeLongRunning(StringValue::class.java) { arg ->
-            assertThat(arg).isEqualTo(stub)
             val operationFuture = SettableFuture.create<Operation>()
             operationFuture.set(operation)
             operationFuture
         }
-        assertThat(result.await().body).isEqualTo(StringValue("hey there!"))
+        assertThat(result.await()).isEqualTo(StringValue("hey there!"))
         assertThat(result.operation).isEqualTo(operation)
     }
 
@@ -173,8 +168,7 @@ class LongRunningCallTest {
 
         val call =
             GrpcClientStub(stub, ClientCallOptions(retry = retry))
-        val result = call.executeLongRunning(StringValue::class.java) { arg ->
-            assertThat(arg).isEqualTo(stub)
+        val result = call.executeLongRunning(StringValue::class.java) { _ ->
             val operationFuture = SettableFuture.create<Operation>()
             operationFuture.set(operation)
             if (!retry.executed) {
@@ -184,7 +178,7 @@ class LongRunningCallTest {
             }
         }
 
-        assertThat(result.await().body).isEqualTo(StringValue("ok"))
+        assertThat(result.await()).isEqualTo(StringValue("ok"))
         assertThat(result.operation).isEqualTo(operation)
         assertThat(retry.executed).isTrue()
     }
@@ -202,15 +196,8 @@ class LongRunningCallTest {
     }
 
     private fun createTestStubMock(): TestStub {
-        val stub: TestStub = mock()
-        whenever(stub.channel).thenReturn(channel)
-        whenever(stub.withInterceptors(any())).thenReturn(stub)
-        whenever(stub.withCallCredentials(any())).thenReturn(stub)
-        whenever(stub.withOption(any(), any<kotlin.Any>())).thenReturn(stub)
-        whenever(stub.callOptions).thenReturn(callOptions)
-        whenever(callOptions.getOption(eq(ClientCallContext.KEY))).thenReturn(callContext)
+        val stub: TestStub = TestStub(channel, CallOptions.DEFAULT.withOption(ClientCallContext.KEY, callContext))
         whenever(callContext.call).thenReturn(clientCall)
-        whenever(callContext.responseMetadata).thenReturn(responseMetadata)
         return stub
     }
 

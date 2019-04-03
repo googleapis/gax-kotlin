@@ -18,6 +18,7 @@ package com.google.api.kgax.examples.grpc
 
 import android.os.Bundle
 import android.support.test.espresso.idling.CountingIdlingResource
+import com.google.api.kgax.grpc.ResponseMetadata
 import com.google.api.kgax.grpc.StubFactory
 import com.google.cloud.language.v1.AnalyzeEntitiesRequest
 import com.google.cloud.language.v1.Document
@@ -58,10 +59,12 @@ class LanguageMetadataActivity : AbstractExampleActivity<LanguageServiceGrpc.Lan
         job = Job()
 
         // call the api
+        lateinit var metadata: ResponseMetadata
         launch(Dispatchers.Main) {
-            val (_, metadata) = stub.prepare {
+            val response = stub.prepare {
                 withMetadata("foo", listOf("1", "2"))
                 withMetadata("bar", listOf("a", "b"))
+                onResponseMetadata { m -> metadata = m }
             }.execute {
                 it.analyzeEntities(
                     AnalyzeEntitiesRequest.newBuilder().apply {
@@ -78,7 +81,7 @@ class LanguageMetadataActivity : AbstractExampleActivity<LanguageServiceGrpc.Lan
                 val value = metadata.getAll(key)?.joinToString(", ")
                 "$key=[$value]"
             }
-            updateUIWithExampleResult(text)
+            updateUIWithExampleResult("response=$response\n\nmetadata=$text")
         }
     }
 }

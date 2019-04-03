@@ -78,7 +78,7 @@ class MessagingTest {
                 }
                 build()
             })
-        }.body
+        }
 
         // connect to the room
         val streams = streamingStub.executeStreaming { it::connect }

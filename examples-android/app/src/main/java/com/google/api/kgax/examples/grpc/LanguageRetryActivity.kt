@@ -75,7 +75,7 @@ class LanguageRetryActivity : AbstractExampleActivity<LanguageServiceGrpc.Langua
                 )
             }
 
-            updateUIWithExampleResult(response.body.toString())
+            updateUIWithExampleResult(response.toString())
         }
     }
 }

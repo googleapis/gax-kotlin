@@ -27,9 +27,9 @@ import io.grpc.MethodDescriptor
 
 /**
  * This interceptor is always attached to API calls and performs any
- * interceptor functionality required by this library, such as capture response metadata.
+ * interceptor functionality required by this library, such as capturing response metadata.
  */
-internal class GAXInterceptor : ClientInterceptor {
+internal object GAXInterceptor : ClientInterceptor {
 
     override fun <ReqT, RespT> interceptCall(
         method: MethodDescriptor<ReqT, RespT>,
@@ -42,23 +42,18 @@ internal class GAXInterceptor : ClientInterceptor {
 
         // start call
         return object : ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(call) {
-            override fun start(
-                responseListener: ClientCall.Listener<RespT>,
-                headers: Metadata
-            ) {
+            override fun start(responseListener: ClientCall.Listener<RespT>, headers: Metadata) {
                 delegate().start(
                     object : ForwardingClientCallListener.SimpleForwardingClientCallListener<RespT>(responseListener) {
                         override fun onHeaders(headers: Metadata?) {
-                            val opts = callOptions.getOption(ClientCallContext.KEY)
-
-                            // save a copy of the headers
-                            if (headers != null) {
-                                val meta = Metadata()
-                                meta.merge(headers)
-                                opts.responseMetadata.metadata = meta
+                            try {
+                                val opts = callOptions.getOption(ClientCallContext.KEY)
+                                if (opts != null && headers != null) {
+                                    opts.onResponseHeaders(headers)
+                                }
+                            } finally {
+                                super.onHeaders(headers)
                             }
-
-                            super.onHeaders(headers)
                         }
                     }, headers
                 )
@@ -68,14 +63,13 @@ internal class GAXInterceptor : ClientInterceptor {
 }
 
 /**
- * Content during an ongoing call.
- *
- * You should not typically use this directly, but you may use
- * the context if you need to access the underlying gRPC [call].
+ * Content during an ongoing gRPC [call].
  */
-class ClientCallContext {
+class ClientCallContext(
+    internal val onResponseHeaders: (Metadata) -> Unit = {}
+) {
+    /** The remote RPC (this is not set until the call is active). */
     lateinit var call: ClientCall<*, *>
-    val responseMetadata: ResponseMetadata = ResponseMetadata()
 
     companion object {
         val KEY: CallOptions.Key<ClientCallContext> = CallOptions.Key.create("kgaxContext")

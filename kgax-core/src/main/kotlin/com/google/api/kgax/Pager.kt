@@ -24,10 +24,10 @@ import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.produce
 
 /** Contains the [elements] of a page and a [token] to get the next set of results. */
-interface Page<T, K> {
-    val elements: Iterable<T>
-    val token: K?
-}
+class Page<T>(
+    val elements: Iterable<T>,
+    val token: String?
+)
 
 /**
  * Create a stream of [Page]s by calling the [method] (once per page) given the [initialRequest] and a set
@@ -40,13 +40,13 @@ interface Page<T, K> {
  * will end it.
  */
 @ExperimentalCoroutinesApi
-suspend fun <ReqT, RespT, ElementT, TokenT, PageT : Page<ElementT, TokenT>> createPager(
+suspend fun <ReqT, RespT, ElementT, PageT : Page<ElementT>> createPager(
+    scope: CoroutineScope = GlobalScope,
     method: suspend (ReqT) -> RespT,
     initialRequest: () -> ReqT,
-    nextRequest: (ReqT, TokenT) -> ReqT,
+    nextRequest: (ReqT, String?) -> ReqT,
     nextPage: (RespT) -> PageT,
-    hasNextPage: (PageT) -> Boolean = { p -> p.elements.any() && p.token != null },
-    scope: CoroutineScope = GlobalScope
+    hasNextPage: (PageT) -> Boolean = { p -> p.elements.any() && p.token != null }
 ): ReceiveChannel<PageT> = scope.produce(capacity = Channel.RENDEZVOUS) {
     val original = initialRequest()
 
@@ -57,6 +57,6 @@ suspend fun <ReqT, RespT, ElementT, TokenT, PageT : Page<ElementT, TokenT>> crea
         channel.send(page)
 
         // get next request
-        request = if (hasNextPage(page)) nextRequest(original, page.token!!) else null
+        request = if (hasNextPage(page)) nextRequest(original, page.token) else null
     }
 }

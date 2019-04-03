@@ -69,7 +69,7 @@ class LanguageActivity : AbstractExampleActivity<LanguageServiceGrpc.LanguageSer
                 )
             }
 
-            updateUIWithExampleResult(response.body.toString())
+            updateUIWithExampleResult(response.toString())
         }
     }
 }

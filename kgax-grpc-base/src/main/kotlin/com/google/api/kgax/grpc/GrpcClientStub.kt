@@ -27,6 +27,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.protobuf.MessageLite
 import io.grpc.CallCredentials
 import io.grpc.ClientInterceptor
+import io.grpc.Metadata
 import io.grpc.Status
 import io.grpc.StatusRuntimeException
 import io.grpc.auth.MoreCallCredentials
@@ -121,14 +122,14 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
     suspend fun <RespT : MessageLite> execute(
         context: String = "",
         method: (T) -> ListenableFuture<RespT>
-    ): CallResult<RespT> {
+    ): RespT {
         var retryContext = RetryContext(context)
 
         while (true) {
             try {
                 val stub = stubWithContext()
-                val result = method(stub).await()
-                return CallResult(result, stub.context.responseMetadata)
+                val call = method(stub)
+                return call.await()
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (throwable: Throwable) {
@@ -179,8 +180,11 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         val responseChannel = Channel<RespT>(Channel.UNLIMITED)
 
         val invoke = { stub: T, responseStream: StreamObserver<RespT> -> method(stub)(responseStream) }
-        val job =
-            executeStreaming(scope, context, invoke, requestChannel = requestChannel, responseChannel = responseChannel)
+        val job = executeStreaming(
+            scope, context, invoke,
+            requestChannel = requestChannel,
+            responseChannel = responseChannel
+        )
 
         return Streamer(job, requestChannel, responseChannel)
     }
@@ -220,7 +224,11 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         val response = CompletableDeferred<RespT>()
 
         val invoke = { stub: T, responseStream: StreamObserver<RespT> -> method(stub)(responseStream) }
-        val job = executeStreaming(scope, context, invoke, requestChannel = requestChannel, response = response)
+        val job = executeStreaming(
+            scope, context, invoke,
+            requestChannel = requestChannel,
+            response = response
+        )
 
         return ClientStreamer(job, requestChannel, response)
     }
@@ -261,7 +269,10 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
             method(stub, responseStream)
             null
         }
-        val job = executeStreaming(scope, context, invoke, responseChannel = responseChannel)
+        val job = executeStreaming(
+            scope, context, invoke,
+            responseChannel = responseChannel
+        )
 
         return ServerStreamer(job, responseChannel)
     }
@@ -475,11 +486,18 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
      */
     fun stubWithContext(): T {
         // add gax interceptor
-        var stub = originalStub
-            .withInterceptors(GAXInterceptor())
+        var stub: T = originalStub
+            .withInterceptors(GAXInterceptor)
             .withOption(
                 ClientCallContext.KEY,
-                ClientCallContext()
+                ClientCallContext(
+                    onResponseHeaders = { headers ->
+                        val metadata = options.responseMetadataFactory(headers)
+                        if (metadata is ResponseMetadata) {
+                            options.responseMetadataHandler(metadata)
+                        }
+                    }
+                )
             )
 
         // add request metadata
@@ -521,7 +539,7 @@ fun <T : AbstractStub<T>> T.prepare(options: ClientCallOptions) =
  * Decorated call options. The settings apply on a per-call level and can be created
  * using the clientCallOptions builder method:
  *
- * val opts = clientCallOptions {
+ * val options = clientCallOptions {
  *     withAccessToken(...)
  *     withMetadata(...)
  * }
@@ -529,6 +547,8 @@ fun <T : AbstractStub<T>> T.prepare(options: ClientCallOptions) =
 class ClientCallOptions constructor(
     val credentials: CallCredentials? = null,
     val requestMetadata: Map<String, List<String>> = mapOf(),
+    val responseMetadataHandler: (Any) -> Unit = {},
+    val responseMetadataFactory: (Metadata) -> Any? = { null },
     val initialRequests: List<Any> = listOf(),
     val interceptors: List<ClientInterceptor> = listOf(),
     val retry: Retry = NoRetry
@@ -537,6 +557,8 @@ class ClientCallOptions constructor(
     constructor(builder: Builder) : this(
         builder.credentials,
         builder.requestMetadata,
+        builder.responseMetadataHandler,
+        builder.responseMetadataFactory,
         builder.initialStreamRequests,
         builder.interceptors,
         builder.retry
@@ -546,6 +568,8 @@ class ClientCallOptions constructor(
     class Builder(
         internal var credentials: CallCredentials? = null,
         internal val requestMetadata: MutableMap<String, List<String>> = mutableMapOf(),
+        internal var responseMetadataHandler: (Any) -> Unit = {},
+        internal var responseMetadataFactory: (Metadata) -> Any? = { null },
         internal val initialStreamRequests: MutableList<Any> = mutableListOf(),
         internal val interceptors: MutableList<ClientInterceptor> = mutableListOf(),
         internal var retry: Retry = NoRetry
@@ -554,12 +578,14 @@ class ClientCallOptions constructor(
         constructor(opts: ClientCallOptions) : this(
             opts.credentials,
             opts.requestMetadata.toMutableMap(),
+            opts.responseMetadataHandler,
+            opts.responseMetadataFactory,
             opts.initialRequests.toMutableList(),
             opts.interceptors.toMutableList(),
             opts.retry
         )
 
-        /** Set service account credentials for authentication */
+        /** Set service account credentials for Google authentication. */
         fun withServiceAccountCredentials(
             keyFile: InputStream,
             scopes: List<String> = listOf()
@@ -572,7 +598,7 @@ class ClientCallOptions constructor(
             credentials = MoreCallCredentials.from(auth)
         }
 
-        /** Set the access token to use for authentication */
+        /** Set the access token to use for Google authentication. */
         fun withAccessToken(token: AccessToken, scopes: List<String> = listOf()) {
             val auth = if (scopes.isEmpty()) {
                 GoogleCredentials.create(token)
@@ -582,29 +608,53 @@ class ClientCallOptions constructor(
             credentials = MoreCallCredentials.from(auth)
         }
 
-        /** Append metadata to the call */
+        /** Append request metadata to the call. */
         fun withMetadata(key: String, value: List<String>) {
             requestMetadata[key] = value
         }
 
-        /** Omit metadata from the call */
+        /** Omit request metadata from the call. */
         fun withoutMetadata(key: String) {
             requestMetadata.remove(key)
         }
 
-        /** For outbound streams, send an initial message as soon as possible */
+        /** For outbound streams, send an initial message as soon as possible. */
         fun <T : MessageLite> withInitialRequest(request: T) {
             initialStreamRequests.add(request)
         }
 
-        /** Append arbitrary interceptors (for advanced use) */
+        /** Append arbitrary interceptors (for advanced use). */
         fun withInterceptor(interceptor: ClientInterceptor) {
             interceptors.add(interceptor)
         }
 
-        /** Use the given [retry] settings */
+        /** Use the given [retry] settings. */
         fun withRetry(retry: Retry) {
             this.retry = retry
+        }
+
+        /**
+         * Capture the trailing response headers during the request and pass them to the [handler].
+         */
+        fun onResponseMetadata(handler: (ResponseMetadata) -> Unit) {
+            @Suppress("UNCHECKED_CAST")
+            responseMetadataHandler = (handler as (Any) -> Unit)
+            responseMetadataFactory = { m -> ResponseMetadata(m) }
+        }
+
+        /**
+         * Capture the trailing response headers during the request and pass them to the [handler].
+         *
+         * You may customize the way headers are handled by providing a custom [factory] and
+         * subclassing [ResponseMetadata].
+         */
+        @Suppress("UNCHECKED_CAST")
+        fun <T : ResponseMetadata> onResponseMetadata(
+            factory: (Metadata) -> T = { m -> ResponseMetadata(m) as T },
+            handler: (T) -> Unit
+        ) {
+            responseMetadataHandler = (handler as (Any) -> Unit)
+            responseMetadataFactory = factory
         }
 
         fun build() = ClientCallOptions(this)
@@ -615,13 +665,6 @@ fun clientCallOptions(init: ClientCallOptions.Builder.() -> Unit = {}): ClientCa
     val builder = ClientCallOptions.Builder()
     builder.apply(init)
     return builder.build()
-}
-
-/** Result of the call with the response [body] associated [metadata]. */
-data class CallResult<RespT>(val body: RespT, val metadata: ResponseMetadata) {
-
-    /** Map the body of this result to another type using the [transform]. */
-    fun <R> map(transform: (RespT) -> R) = CallResult(transform(this.body), this.metadata)
 }
 
 /**
@@ -664,13 +707,6 @@ private class ServerStreamer<RespT>(
     override val responses: ReceiveChannel<RespT>
 ) : ServerStreamingCall<RespT>, Job by job
 
-/** Result of a call with paging */
-data class PageWithMetadata<T>(
-    override val elements: Iterable<T>,
-    override val token: String,
-    val metadata: ResponseMetadata
-) : Page<T, String>
-
 /**
  * Create a stream of [Page]s.
  *
@@ -688,7 +724,7 @@ data class PageWithMetadata<T>(
  *          request.toBuilder().setPageToken(token).build()
  *      }
  *      nextPage = { response ->
- *          PageWithMetadata(response.entriesList, response.nextPageToken)
+ *          Page(response.entriesList, response.nextPageToken)
  *      }
  *  }
  *
@@ -704,14 +740,14 @@ data class PageWithMetadata<T>(
 suspend fun <ReqT, RespT, ElementT> pager(
     method: suspend (ReqT) -> RespT,
     initialRequest: () -> ReqT,
-    nextRequest: (ReqT, String) -> ReqT,
-    nextPage: (RespT) -> PageWithMetadata<ElementT>
-): ReceiveChannel<PageWithMetadata<ElementT>> = createPager(
+    nextRequest: (ReqT, String?) -> ReqT,
+    nextPage: (RespT) -> Page<ElementT>
+): ReceiveChannel<Page<ElementT>> = createPager(
     method = method,
     initialRequest = initialRequest,
     nextRequest = nextRequest,
     nextPage = nextPage,
-    hasNextPage = { p -> p.elements.any() && p.token.isNotEmpty() }
+    hasNextPage = { p -> p.elements.any() && (p.token?.isNotEmpty() ?: false) }
 )
 
 /** Get the call context associated with a one time use stub */

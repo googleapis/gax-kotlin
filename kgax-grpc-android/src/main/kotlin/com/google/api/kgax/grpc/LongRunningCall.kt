@@ -31,7 +31,7 @@ import kotlinx.coroutines.coroutineScope
 /** Resolves long running operations. */
 class LongRunningCall<T : MessageLite>(
     private val stub: GrpcClientStub<OperationsClientStub>,
-    deferred: Deferred<CallResult<Operation>>,
+    deferred: Deferred<Operation>,
     responseType: Class<T>
 ) : LongRunningCallBase<T, Operation>(deferred, responseType) {
 

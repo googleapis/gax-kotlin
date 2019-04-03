@@ -32,7 +32,7 @@ class LongRunningCallBaseTest {
     @Test
     fun `LRO is done`() = runBlocking {
         val lro = LRO(GlobalScope.async {
-            CallResult(OpClass(1, done = true, value = string("1")), ResponseMetadata())
+            OpClass(1, done = true, value = string("1"))
         })
         assertThat(lro.isDone).isFalse()
         lro.await()
@@ -44,7 +44,7 @@ class LongRunningCallBaseTest {
         assertFailsWith<java.lang.RuntimeException>("did not complete") {
             runBlocking {
                 val lro = LRO(GlobalScope.async {
-                    CallResult(OpClass(1, done = false, value = string("1")), ResponseMetadata())
+                    OpClass(1, done = false, value = string("1"))
                 }, false)
                 assertThat(lro.isDone).isFalse()
                 lro.await()
@@ -56,15 +56,15 @@ class LongRunningCallBaseTest {
 private class OpClass(val id: Int, val done: Boolean = false, val value: StringValue? = null)
 
 private class LRO(
-    deferred: Deferred<CallResult<OpClass>>,
+    deferred: Deferred<OpClass>,
     val willComplete: Boolean = true
 ) : LongRunningCallBase<StringValue, OpClass>(deferred, StringValue::class.java) {
-    override suspend fun nextOperation(op: OpClass): CallResult<OpClass> {
+    override suspend fun nextOperation(op: OpClass): OpClass {
         return if (op.id < 10) {
-            CallResult(OpClass(op.id + 1), ResponseMetadata())
+            OpClass(op.id + 1)
         } else {
             if (willComplete) {
-                CallResult(OpClass(op.id + 1, done = true, value = string("done!")), ResponseMetadata())
+                OpClass(op.id + 1, done = true, value = string("done!"))
             } else {
                 throw RuntimeException("did not complete")
             }
