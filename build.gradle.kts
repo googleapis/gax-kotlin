@@ -21,6 +21,7 @@ import org.jetbrains.dokka.gradle.PackageOptions
 plugins {
     idea
     maven
+    `maven-publish`
     kotlin("jvm") version "1.3.21"
     id("org.jetbrains.dokka") version "0.9.17"
     id("jacoco")
@@ -75,6 +76,8 @@ allprojects {
 }
 
 subprojects {
+    apply(plugin = "maven-publish")
+
     val ktlintImplementation by configurations.creating
 
     dependencies {
@@ -116,6 +119,14 @@ subprojects {
                 main = "com.github.shyiko.ktlint.Main"
                 classpath = ktlintImplementation
                 args = listOf("-F", "src/**/*.kt", "test/**/*.kt")
+            }
+        }
+    }
+
+    publishing {
+        publications {
+            create<MavenPublication>("mavenJava") {
+                from(components["java"])
             }
         }
     }
