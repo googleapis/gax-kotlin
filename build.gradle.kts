@@ -25,7 +25,6 @@ plugins {
     kotlin("jvm") version "1.3.21"
     id("org.jetbrains.dokka") version "0.9.17"
     id("jacoco")
-    id("net.researchgate.release") version "2.8.0"
 }
 
 dependencies {
