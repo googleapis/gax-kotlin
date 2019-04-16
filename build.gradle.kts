@@ -22,7 +22,7 @@ plugins {
     idea
     maven
     `maven-publish`
-    kotlin("jvm") version "1.3.21"
+    kotlin("jvm") version "1.3.30"
     id("org.jetbrains.dokka") version "0.9.17"
     id("jacoco")
 }
@@ -45,15 +45,15 @@ base {
 
 allprojects {
     group = "com.google.api"
-    version = "0.5.0"
+    version = "0.6.0-SNAPSHOT"
 
     ext {
         set("javax_annotation_version", "1.3.2")
-        set("protobuf_version", "3.6.1")
-        set("protoc_version", "3.6.1")
+        set("protobuf_version", "3.7.1")
+        set("protoc_version", "3.7.1")
         set("protobuf_lite_version", "3.0.1")
         set("protoc_gen_javalite_version", "3.0.0")
-        set("grpc_version", "1.16.1")
+        set("grpc_version", "1.20.0")
 
         set("junit_version", "4.12")
         set("mockito_kotlin_version", "1.6.0")
@@ -81,7 +81,7 @@ subprojects {
     val ktlintImplementation by configurations.creating
 
     dependencies {
-        ktlintImplementation("com.github.shyiko:ktlint:0.30.0")
+        ktlintImplementation("com.github.shyiko:ktlint:0.31.0")
     }
 
     afterEvaluate {
