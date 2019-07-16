@@ -45,7 +45,7 @@ base {
 
 allprojects {
     group = "com.google.api"
-    version = "0.6.0-SNAPSHOT"
+    version = "0.6.0"
 
     ext {
         set("javax_annotation_version", "1.3.2")
