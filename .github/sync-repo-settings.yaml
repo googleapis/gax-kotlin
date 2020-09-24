@@ -5,6 +5,8 @@ branchProtectionRules:
 - pattern: master
   isAdminEnforced: true
   requiredStatusCheckContexts:
+    - 'ci/circleci: build'
+    - 'ci/circleci: build_android_examples'
     - 'cla/google'
   requiredApprovingReviewCount: 1
   requiresCodeOwnerReviews: true
