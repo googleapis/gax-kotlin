@@ -27,7 +27,7 @@ plugins {
     maven
     kotlin("jvm")
     `java-library`
-    id("com.google.protobuf") version "0.8.8"
+    id("com.google.protobuf") version "0.8.17"
     jacoco
 }
 
