@@ -25,7 +25,7 @@ plugins {
     idea
     java
     kotlin("jvm")
-    id("com.google.protobuf") version "0.8.8"
+    id("com.google.protobuf") version "0.8.17"
 }
 
 base {
