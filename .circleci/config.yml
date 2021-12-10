@@ -4,7 +4,7 @@ jobs:
   build:
     docker:
       - image: circleci/openjdk:8-jdk
-      - image: gcr.io/gapic-showcase/gapic-showcase:0.0.12
+      - image: gcr.io/gapic-images/gapic-showcase:0.0.12
     working_directory: ~/gax-kotlin
     steps:
       - checkout
