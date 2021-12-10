@@ -15,7 +15,7 @@ jobs:
             git submodule update
       - restore_cache: &kgax-key
           key: kgax-{{ checksum "build.gradle.kts" }}-{{ checksum "kgax-core/build.gradle.kts" }}-{{ checksum "kgax-grpc-base/build.gradle.kts" }}-{{ checksum "kgax-grpc/build.gradle.kts" }}-{{ checksum "kgax-grpc-android/build.gradle.kts" }}
-      - run: 
+      - run:
           name: Download Dependencies
           command: ./gradlew dependencies
       - save_cache:
@@ -25,7 +25,7 @@ jobs:
       - run:
            name: Build and run checks
            command: ./gradlew build
-      - run: 
+      - run:
           name: Save test results
           command: |
             mkdir -p ~/junit/
@@ -34,8 +34,8 @@ jobs:
       - store_test_results:
           path: ~/junit
       - store_artifacts:
-          path: ~/junit        
-      - run: 
+          path: ~/junit
+      - run:
           name: Codecov
           command: bash <(curl -s https://codecov.io/bash)
           when: always
@@ -152,13 +152,13 @@ workflows:
       - test_cloud_examples:
           requires:
             - build
-          filters: &master-filter
+          filters: &main-filter
             branches:
-              only: master
+              only: main
             tags:
               only: /.*/
       - test_android_examples:
           requires:
             - build_android_examples
           filters:
-            <<: *master-filter
+            <<: *main-filter
