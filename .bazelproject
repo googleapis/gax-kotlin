@@ -1,0 +1,15 @@
+directories:
+  .
+
+java_language_level: 11
+derive_targets_from_directories: true
+
+targets:
+  //:kgax-core
+  //:kgax-grpc-base
+  //:kgax-grpc
+  //:kgax-grpc-android
+
+additional_languages:
+  kotlin
+

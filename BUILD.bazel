@@ -1,0 +1,72 @@
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+load(
+    "@io_bazel_rules_kotlin//kotlin:jvm.bzl",
+    "kt_jvm_library",
+)
+
+GRPC_DEPS = [
+    "@com_google_protobuf//:protobuf_java",
+    "@com_google_protobuf//:protobuf_javalite",
+    "@io_grpc_grpc_java//api",
+    "@io_grpc_grpc_java//auth",
+    "@io_grpc_grpc_java//core",
+    "@io_grpc_grpc_java//stub",
+    "@maven//:com_google_api_gax",
+    "@maven//:com_google_api_gax_grpc",
+    "@maven//:com_google_auth_google_auth_library_credentials",
+    "@maven//:com_google_auth_google_auth_library_oauth2_http",
+    "@maven//:com_google_guava_guava",
+    "@maven//:javax_annotation_javax_annotation_api",
+]
+
+KOTLINX_DEPS = [
+    "@maven//:org_jetbrains_kotlin_kotlin_stdlib_jdk7",
+    "@maven//:org_jetbrains_kotlin_kotlin_stdlib_jdk8",
+    "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+    "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core_jvm",
+    "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_jdk8",
+    "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_jdk9",
+    "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_guava",
+]
+
+exports_files([
+    "maven_install.json",
+])
+
+kt_jvm_library(
+    name = "kgax-core",
+    srcs = glob(["kgax-core/src/main/**/*.kt"]),
+    deps = [
+        # Nothing yet.
+    ] + KOTLINX_DEPS,
+)
+
+kt_jvm_library(
+    name = "kgax-grpc-android",
+    srcs = glob(["kgax-grpc-android/src/main/**/*.kt"]),
+    deps = [
+        ":kgax-core",
+        ":kgax-grpc-base",
+    ],
+)
+
+kt_jvm_library(
+    name = "kgax-grpc-base",
+    srcs = glob(["kgax-grpc-base/src/main/**/*.kt"]),
+    deps = [
+        ":kgax-core",
+    ] + KOTLINX_DEPS + GRPC_DEPS,
+)
+
+kt_jvm_library(
+    name = "kgax-grpc",
+    srcs = glob(["kgax-grpc/src/main/**/*.kt"]),
+    deps = [
+        ":kgax-core",
+        ":kgax-grpc-base",
+    ],
+)
+

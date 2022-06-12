@@ -42,12 +42,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ObsoleteCoroutinesApi
-import kotlinx.coroutines.channels.ActorScope
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.channels.SendChannel
-import kotlinx.coroutines.channels.actor
-import kotlinx.coroutines.channels.sendBlocking
+import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
@@ -340,7 +335,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
         init {
             // add shutdown handlers
             responseChannel?.invokeOnClose { error ->
-                channel.sendBlocking(StreamEvent.KillRPC(error))
+                channel.trySendBlocking(StreamEvent.KillRPC(error))
             }
             requestChannel?.invokeOnClose {
                 // ensure all send events have been processed before proceeding
@@ -348,7 +343,7 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
                 runBlocking {
                     requestWriter?.join()
                 }
-                channel.sendBlocking(StreamEvent.KillInput)
+                channel.trySendBlocking(StreamEvent.KillInput)
             }
         }
 
@@ -376,9 +371,15 @@ class GrpcClientStub<T : AbstractStub<T>>(val originalStub: T, val options: Clie
 
             // invoke method and forward events to processor
             requestObserver = method(stub, object : StreamObserver<RespT> {
-                override fun onNext(value: RespT) = channel.sendBlocking(StreamEvent.Receive(value))
-                override fun onError(t: Throwable) = channel.sendBlocking(StreamEvent.Error(t))
-                override fun onCompleted() = channel.sendBlocking(StreamEvent.Close)
+                override fun onNext(value: RespT) {
+                    channel.trySendBlocking(StreamEvent.Receive(value))
+                }
+                override fun onError(t: Throwable) {
+                    channel.trySendBlocking(StreamEvent.Error(t))
+                }
+                override fun onCompleted() {
+                    channel.trySendBlocking(StreamEvent.Close)
+                }
             })
 
             // send any initial requests
