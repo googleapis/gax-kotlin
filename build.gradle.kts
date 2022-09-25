@@ -22,7 +22,7 @@ plugins {
     idea
     maven
     `maven-publish`
-    kotlin("jvm") version "1.3.30"
+    kotlin("jvm") version "1.7.10"
     id("org.jetbrains.dokka") version "0.9.17"
     id("jacoco")
 }
