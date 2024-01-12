@@ -53,7 +53,7 @@ allprojects {
         set("protoc_version", "3.7.1")
         set("protobuf_lite_version", "3.0.1")
         set("protoc_gen_javalite_version", "3.0.0")
-        set("grpc_version", "1.20.0")
+        set("grpc_version", "1.61.0")
 
         set("junit_version", "4.12")
         set("mockito_kotlin_version", "1.6.0")
