@@ -45,7 +45,7 @@ dependencies {
     implementation("io.grpc:grpc-protobuf-lite:${ext["grpc_version"]}")
     api("io.grpc:grpc-stub:${ext["grpc_version"]}")
     api("io.grpc:grpc-auth:${ext["grpc_version"]}")
-    api("com.google.auth:google-auth-library-oauth2-http:0.9.1")
+    api("com.google.auth:google-auth-library-oauth2-http:1.23.0")
     api("com.google.auth:google-auth-library-credentials:0.9.1")
 
     testImplementation(kotlin("test"))
