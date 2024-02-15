@@ -27,7 +27,7 @@ dependencies {
     implementation("javax.annotation:javax.annotation-api:${ext["javax_annotation_version"]}")
 
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.1.0")
-    api("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.1.0")
+    api("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.8.0")
     
     testImplementation(kotlin("test"))
     testImplementation(kotlin("test-junit"))
