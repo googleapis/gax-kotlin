@@ -50,7 +50,7 @@ allprojects {
     ext {
         set("javax_annotation_version", "1.3.2")
         set("protobuf_version", "3.7.1")
-        set("protoc_version", "3.7.1")
+        set("protoc_version", "3.25.3")
         set("protobuf_lite_version", "3.0.1")
         set("protoc_gen_javalite_version", "3.0.0")
         set("grpc_version", "1.20.0")
